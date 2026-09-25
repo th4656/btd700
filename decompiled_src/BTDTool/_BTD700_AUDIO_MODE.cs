@@ -1,0 +1,8 @@
+namespace BTDTool;
+
+public enum _BTD700_AUDIO_MODE
+{
+	AMODE_HIGHQUALITY,
+	AMODE_GAMING,
+	AMODE_BROADCAST
+}

@@ -1,0 +1,7 @@
+namespace BTDTool;
+
+public enum _BTD700_BROADCAST_STATE
+{
+	BCAST_OFF_PRIVATE,
+	BCAST_ON_PUBLIC
+}

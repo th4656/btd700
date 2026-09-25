@@ -1,0 +1,7 @@
+namespace BTDTool;
+
+public enum _BTD700_AUDIO_RESOLUTION
+{
+	AUDIORES_16BIT = 1,
+	AUDIORES_24BIT
+}

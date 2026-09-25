@@ -1,0 +1,7 @@
+namespace BTDTool;
+
+public enum _BTD700_BROADCAST_ENCRYPTION
+{
+	BCAST_ENCR_OFF,
+	BCAST_ENCR_ON
+}

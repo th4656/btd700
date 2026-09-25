@@ -1,0 +1,106 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>Sennheiser Dongle Control</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <UseWPF>True</UseWPF>
+    <TargetFramework>netcoreapp8.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="exclamationtriangle.png" />
+    <None Remove="strings/strings.fr-fr.baml" />
+    <None Remove="views/mainappwindow.baml" />
+    <None Remove="fonts/sennheiserneuevmmediumitalic.otf" />
+    <None Remove="strings/strings.ja-jp.baml" />
+    <None Remove="btd600.png" />
+    <None Remove="views/appdfu.baml" />
+    <None Remove="fonts/sennheiserneuevmbolditalic.otf" />
+    <None Remove="assets/bigspinner-mod.gif" />
+    <None Remove="fonts/sennheiserneuevmregularitalic.otf" />
+    <None Remove="fonts/sennheiserneuevmregular.otf" />
+    <None Remove="assets/whitewelcome.png" />
+    <None Remove="fonts/sennheiserneuevmlight.otf" />
+    <None Remove="strings/strings.ru-ru.baml" />
+    <None Remove="strings/strings.zh-tw.baml" />
+    <None Remove="assets/btdwelcome.png" />
+    <None Remove="strings/strings.zh-cn.baml" />
+    <None Remove="btd700.png" />
+    <None Remove="views/appbtd700features.baml" />
+    <None Remove="strings/strings.en-us.baml" />
+    <None Remove="debugwindow.baml" />
+    <None Remove="views/appdonglewait.baml" />
+    <None Remove="fonts/sennheiserneuevmbold.otf" />
+    <None Remove="fonts/sennheiserneuevmmedium.otf" />
+    <None Remove="strings/strings.ko-kr.baml" />
+    <None Remove="fonts/sennheiserneuevmlightitalic.otf" />
+    <None Remove="assets/app_icon.ico" />
+    <None Remove="views/applicense.baml" />
+    <None Remove="assets/sennheiser_animation_whitebg_single.gif" />
+    <None Remove="fonts/sennheiserneuevmmonospaced.otf" />
+    <None Remove="strings/strings.de-de.baml" />
+    <None Remove="views/appsettings.baml" />
+    <None Remove="fileicon2.png" />
+    <None Remove="exclamationcircle.png" />
+    <None Remove="strings/strings.es-es.baml" />
+    <None Remove="app.baml" />
+    <None Remove="views/apptoastwindow.baml" />
+    <None Remove="BTDTool.herve.dll" />
+    <EmbeddedResource Include="exclamationtriangle.png" LogicalName="exclamationtriangle.png" />
+    <EmbeddedResource Include="strings/strings.fr-fr.baml" LogicalName="strings/strings.fr-fr.baml" />
+    <EmbeddedResource Include="views/mainappwindow.baml" LogicalName="views/mainappwindow.baml" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmmediumitalic.otf" LogicalName="fonts/sennheiserneuevmmediumitalic.otf" />
+    <EmbeddedResource Include="strings/strings.ja-jp.baml" LogicalName="strings/strings.ja-jp.baml" />
+    <EmbeddedResource Include="btd600.png" LogicalName="btd600.png" />
+    <EmbeddedResource Include="views/appdfu.baml" LogicalName="views/appdfu.baml" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmbolditalic.otf" LogicalName="fonts/sennheiserneuevmbolditalic.otf" />
+    <EmbeddedResource Include="assets/bigspinner-mod.gif" LogicalName="assets/bigspinner-mod.gif" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmregularitalic.otf" LogicalName="fonts/sennheiserneuevmregularitalic.otf" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmregular.otf" LogicalName="fonts/sennheiserneuevmregular.otf" />
+    <EmbeddedResource Include="assets/whitewelcome.png" LogicalName="assets/whitewelcome.png" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmlight.otf" LogicalName="fonts/sennheiserneuevmlight.otf" />
+    <EmbeddedResource Include="strings/strings.ru-ru.baml" LogicalName="strings/strings.ru-ru.baml" />
+    <EmbeddedResource Include="strings/strings.zh-tw.baml" LogicalName="strings/strings.zh-tw.baml" />
+    <EmbeddedResource Include="assets/btdwelcome.png" LogicalName="assets/btdwelcome.png" />
+    <EmbeddedResource Include="strings/strings.zh-cn.baml" LogicalName="strings/strings.zh-cn.baml" />
+    <EmbeddedResource Include="btd700.png" LogicalName="btd700.png" />
+    <EmbeddedResource Include="views/appbtd700features.baml" LogicalName="views/appbtd700features.baml" />
+    <EmbeddedResource Include="strings/strings.en-us.baml" LogicalName="strings/strings.en-us.baml" />
+    <EmbeddedResource Include="debugwindow.baml" LogicalName="debugwindow.baml" />
+    <EmbeddedResource Include="views/appdonglewait.baml" LogicalName="views/appdonglewait.baml" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmbold.otf" LogicalName="fonts/sennheiserneuevmbold.otf" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmmedium.otf" LogicalName="fonts/sennheiserneuevmmedium.otf" />
+    <EmbeddedResource Include="strings/strings.ko-kr.baml" LogicalName="strings/strings.ko-kr.baml" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmlightitalic.otf" LogicalName="fonts/sennheiserneuevmlightitalic.otf" />
+    <EmbeddedResource Include="assets/app_icon.ico" LogicalName="assets/app_icon.ico" />
+    <EmbeddedResource Include="views/applicense.baml" LogicalName="views/applicense.baml" />
+    <EmbeddedResource Include="assets/sennheiser_animation_whitebg_single.gif" LogicalName="assets/sennheiser_animation_whitebg_single.gif" />
+    <EmbeddedResource Include="fonts/sennheiserneuevmmonospaced.otf" LogicalName="fonts/sennheiserneuevmmonospaced.otf" />
+    <EmbeddedResource Include="strings/strings.de-de.baml" LogicalName="strings/strings.de-de.baml" />
+    <EmbeddedResource Include="views/appsettings.baml" LogicalName="views/appsettings.baml" />
+    <EmbeddedResource Include="fileicon2.png" LogicalName="fileicon2.png" />
+    <EmbeddedResource Include="exclamationcircle.png" LogicalName="exclamationcircle.png" />
+    <EmbeddedResource Include="strings/strings.es-es.baml" LogicalName="strings/strings.es-es.baml" />
+    <EmbeddedResource Include="app.baml" LogicalName="app.baml" />
+    <EmbeddedResource Include="views/apptoastwindow.baml" LogicalName="views/apptoastwindow.baml" />
+    <EmbeddedResource Include="BTDTool.herve.dll" LogicalName="BTDTool.herve.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="PresentationCore">
+      <HintPath>extracted/PresentationCore.dll</HintPath>
+    </Reference>
+    <Reference Include="HidSharp">
+      <HintPath>extracted/HidSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Configuration.ConfigurationManager">
+      <HintPath>extracted/System.Configuration.ConfigurationManager.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Sennheiser Dongle Control
+Comment=Configure Sennheiser BTD 600 and BTD 700 Bluetooth Adapters
+Exec=btd700 gui
+Icon=sennheiser-btd
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;AudioVideo;Audio;
+Keywords=sennheiser;btd;btd600;btd700;bluetooth;auracast;aptx;audio;

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "btd700"
+version = "1.0.5"
+description = "Sennheiser Dongle Control (BTD 600 / BTD 700) for Linux"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "Antigravity"}]
+
+[project.scripts]
+btd700 = "btd700.cli:main"
