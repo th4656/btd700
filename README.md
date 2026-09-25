@@ -29,8 +29,14 @@ Provides both a powerful **Command Line Interface (CLI)** and a sleek **Web GUI 
   - Query Sennheiser's live firmware cloud API (`api.s-consumer-cloud.com`) for latest releases and release notes.
   - Download official `.bin` firmware packages.
   - Flash Qualcomm APPUHDR5 images via Qualcomm UPM (Universal Programming Module) protocol.
+- **Headset ANC & Transparency Control (HDB 630, Momentum 4, Accentum)**:
+  - Toggle or set **Active Noise Cancellation (ANC)**.
+  - Adjust **Transparency mode** level (0% - 100%).
+  - Toggle **Bass Boost** hardware EQ.
+  - Communicates directly with the headphones via Bluetooth Multipoint and **Qualcomm GAIA V3** over RFCOMM (Vendor ID `0x0495`, just like the Sennheiser Smart Control mobile app).
 - **Web GUI Control Panel**:
   - Browser-based visual interface matching Sennheiser's dark theme aesthetic.
+  - Controls both the BTD 700 USB dongle and connected headphones simultaneously.
   - Official high-res product renders and branding.
 
 ---
@@ -124,11 +130,41 @@ Output:
 
 #### Pairing & Reset
 ```bash
-# Trigger pairing mode
+# Trigger pairing mode on dongle
 ./btd700.py pair
 
-# Factory reset
+# Factory reset dongle
 ./btd700.py reset
+```
+
+#### Headphone ANC & Transparency Control (HDB 630 / Momentum 4)
+Sennheiser headphones support **Bluetooth Multipoint**. Simply pair your headphones with Linux Bluetooth once. `btd700` will auto-detect your paired Sennheiser headphones and communicate using Qualcomm GAIA V3:
+
+```bash
+# Toggle Active Noise Cancellation (ANC)
+./btd700.py anc toggle
+
+# Set ANC explicitly ON or OFF
+./btd700.py anc on
+./btd700.py anc off
+
+# Check ANC status
+./btd700.py anc
+
+# Transparency mode (0% - 100%)
+./btd700.py transparency 80
+./btd700.py transparency
+
+# Toggle Bass Boost hardware EQ
+./btd700.py bass-boost on
+./btd700.py bass-boost off
+./btd700.py bass-boost
+
+# Full headset status summary
+./btd700.py headset
+
+# List paired Bluetooth devices
+./btd700.py headsets
 ```
 
 #### Firmware Updates (DFU)
@@ -185,3 +221,10 @@ Re-engineered directly from Sennheiser Dongle Control (MSIL/WPF):
   - Versions: `availableSystemReleases/<SKU>?os_type=android`
   - Release manifest: `systemRelease/<SKU>/<version>?os_type=android`
   - Release notes: `getExtras/<SKU>/<version>?os_type=android`
+- **Headphone Control Protocol (Qualcomm GAIA V3 over Bluetooth RFCOMM)**:
+  - Transport: Bluetooth RFCOMM (native Linux `AF_BLUETOOTH`)
+  - Magic Header: `0xFF 0x03`
+  - Vendor ID: `0x0495` (Sennheiser)
+  - ANC Toggle / Status: Commands `0x1A04` (Set) and `0x1A05` (Get)
+  - Transparency Mode: Commands `0x1A02` (Set) and `0x1A03` (Get)
+  - Bass Boost EQ: Commands `0x1008` (Set) and `0x1009` (Get)

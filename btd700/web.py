@@ -6,9 +6,10 @@ modern responsive design, real-time controls, and REST API.
 
 import os
 import json
+import time
 import webbrowser
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from typing import Optional, Dict, Any
 
@@ -23,6 +24,13 @@ from .constants import (
 from .device import BTDDevice, get_first_dongle
 from .hid import find_sennheiser_hid_devices
 from .cloud import SennheiserCloudClient
+from .headset import (
+    SennheiserHeadset,
+    find_paired_headsets,
+    get_default_mac,
+    save_config,
+    load_config,
+)
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -396,6 +404,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Headphone Control (ANC, Transparency, EQ) -->
+    <div class="panel-card" id="headsetPanel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="section-title" style="margin-bottom: 0;">Headphone Controls (HDB 630 / Momentum)</div>
+        <span id="headsetTag" style="font-size: 0.8rem; background: rgba(0,159,227,0.15); color: var(--accent); padding: 4px 10px; border-radius: 12px;">Bluetooth Multipoint</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">Active Noise Cancellation (ANC)</label>
+          <button class="btn btn-secondary" id="btnAnc" onclick="toggleAnc()" style="width: 100%; justify-content: center;">
+            ANC: Checking...
+          </button>
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">Bass Boost</label>
+          <button class="btn btn-secondary" id="btnBass" onclick="toggleBass()" style="width: 100%; justify-content: center;">
+            Bass Boost: Checking...
+          </button>
+        </div>
+      </div>
+      <div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">
+          <span>Transparency Mode</span>
+          <span id="transVal">50%</span>
+        </div>
+        <input type="range" id="transSlider" min="0" max="100" value="50" onchange="changeTransparency(this.value)" oninput="document.getElementById('transVal').innerText = this.value + '%'" style="width: 100%; accent-color: var(--accent);">
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; color: var(--text-muted);">
+        <span id="headsetDeviceLabel">Device: Auto-Detect</span>
+        <button class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.75rem;" onclick="scanHeadsetDevices()">Scan / Connect</button>
+      </div>
+    </div>
+
     <!-- Auracast Panel (shown when broadcast is active or configured) -->
     <div class="bcast-panel" id="bcastPanel">
       <div class="section-title">Auracast™ Broadcast Configuration</div>
@@ -595,12 +636,232 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    async function fetchHeadsetStatus() {
+      try {
+        const res = await fetch('/api/headset/status');
+        const data = await res.json();
+        const btnAnc = document.getElementById('btnAnc');
+        const btnBass = document.getElementById('btnBass');
+
+        if (data.connected || data.mac) {
+          btnAnc.innerText = 'ANC: ' + (data.anc_enabled ? 'ON' : 'OFF');
+          btnAnc.className = 'btn ' + (data.anc_enabled ? 'btn-primary' : 'btn-secondary');
+
+          btnBass.innerText = 'Bass Boost: ' + (data.bass_boost ? 'ON' : 'OFF');
+          btnBass.className = 'btn ' + (data.bass_boost ? 'btn-primary' : 'btn-secondary');
+
+          document.getElementById('transVal').innerText = (data.transparency || 0) + '%';
+          if (!document.getElementById('transSlider').matches(':active')) {
+            document.getElementById('transSlider').value = data.transparency || 0;
+          }
+          document.getElementById('headsetDeviceLabel').innerText = 'Connected: ' + data.mac;
+        } else {
+          btnAnc.innerText = 'ANC: Headset Not Connected';
+          btnAnc.className = 'btn btn-secondary';
+          btnBass.innerText = 'Bass Boost: Off';
+          btnBass.className = 'btn btn-secondary';
+          document.getElementById('headsetDeviceLabel').innerText = 'Headset: Not Connected (Pair via Bluetooth)';
+        }
+      } catch (e) {
+        document.getElementById('btnAnc').innerText = 'ANC: Standby';
+      }
+    }
+
+    async function toggleAnc() {
+      await fetch('/api/headset/anc', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ toggle: true })
+      });
+      fetchHeadsetStatus();
+    }
+
+    async function toggleBass() {
+      await fetch('/api/headset/bass_boost', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ toggle: true })
+      });
+      fetchHeadsetStatus();
+    }
+
+    async function changeTransparency(val) {
+      await fetch('/api/headset/transparency', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ level: parseInt(val) })
+      });
+      fetchHeadsetStatus();
+    }
+
+    async function scanHeadsetDevices() {
+      const res = await fetch('/api/headset/devices');
+      const devs = await res.json();
+      if (!devs || devs.length === 0) {
+        alert('No paired Bluetooth devices found.\nPlease pair your HDB 630 with Linux via Bluetooth Settings.');
+        return;
+      }
+      let msg = 'Select Sennheiser headset:\n';
+      devs.forEach((d, i) => {
+        msg += `${i+1}. ${d.name} (${d.mac})\n`;
+      });
+      const choice = prompt(msg + '\nEnter number (1-' + devs.length + '):');
+      if (choice) {
+        const idx = parseInt(choice) - 1;
+        if (idx >= 0 && idx < devs.length) {
+          await fetch('/api/headset/select', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ mac: devs[idx].mac })
+          });
+          fetchHeadsetStatus();
+        }
+      }
+    }
+
     fetchStatus();
-    pollInterval = setInterval(fetchStatus, 1500);
+    fetchHeadsetStatus();
+    pollInterval = setInterval(() => {
+      fetchStatus();
+      fetchHeadsetStatus();
+    }, 2000);
   </script>
 </body>
 </html>
 """
+
+
+
+class HeadsetManager:
+    """Manages background Bluetooth RFCOMM connection to Sennheiser headset."""
+    _lock = threading.Lock()
+    _headset: Optional[SennheiserHeadset] = None
+    _last_attempt: float = 0.0
+    _last_state: Dict[str, Any] = {
+        "connected": False,
+        "mac": None,
+        "anc_enabled": False,
+        "transparency": 0,
+        "bass_boost": False,
+    }
+
+    @classmethod
+    def get_status(cls, force_connect: bool = False) -> Dict[str, Any]:
+        with cls._lock:
+            now = time.monotonic()
+            mac = get_default_mac()
+            if not mac:
+                return {
+                    "connected": False,
+                    "mac": None,
+                    "error": "No paired headset found. Pair HDB 630 via Bluetooth settings.",
+                    "anc_enabled": False,
+                    "transparency": 0,
+                    "bass_boost": False,
+                }
+
+            if cls._headset is None or cls._headset.mac != mac:
+                if cls._headset:
+                    cls._headset.close()
+                cls._headset = SennheiserHeadset(mac=mac)
+
+            hs = cls._headset
+            if not hs.is_connected():
+                # Avoid attempting to reconnect on every poll if failed recently
+                if not force_connect and (now - cls._last_attempt) < 10.0:
+                    return cls._last_state
+                cls._last_attempt = now
+                try:
+                    hs.connect(timeout=2.0)
+                except Exception as e:
+                    cls._last_state = {
+                        "connected": False,
+                        "mac": hs.mac,
+                        "error": str(e),
+                        "anc_enabled": False,
+                        "transparency": 0,
+                        "bass_boost": False,
+                    }
+                    return cls._last_state
+
+            try:
+                state = hs.get_state()
+                cls._last_state = state
+                return state
+            except Exception as e:
+                hs.close()
+                cls._last_state = {
+                    "connected": False,
+                    "mac": hs.mac,
+                    "error": str(e),
+                    "anc_enabled": False,
+                    "transparency": 0,
+                    "bass_boost": False,
+                }
+                return cls._last_state
+
+    @classmethod
+    def _ensure_connected(cls) -> SennheiserHeadset:
+        now = time.monotonic()
+        mac = get_default_mac()
+        if not mac:
+            raise ValueError("No paired headset found. Pair HDB 630 via Bluetooth settings.")
+        if cls._headset is None or cls._headset.mac != mac:
+            if cls._headset:
+                cls._headset.close()
+            cls._headset = SennheiserHeadset(mac=mac)
+        hs = cls._headset
+        if not hs.is_connected():
+            cls._last_attempt = now
+            hs.connect(timeout=3.0)
+        return hs
+
+    @classmethod
+    def toggle_anc(cls) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            new_st = hs.toggle_anc()
+            cls._last_state["anc_enabled"] = new_st
+            cls._last_state["connected"] = True
+            return new_st
+
+    @classmethod
+    def set_anc(cls, enabled: bool) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_anc_status(enabled)
+            cls._last_state["anc_enabled"] = enabled
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def set_transparency(cls, level: int) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_transparency(level)
+            cls._last_state["transparency"] = level
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def set_bass_boost(cls, enabled: bool) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_bass_boost(enabled)
+            cls._last_state["bass_boost"] = enabled
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def select_device(cls, mac: str):
+        with cls._lock:
+            cfg = load_config()
+            cfg["headset_mac"] = mac.upper()
+            save_config(cfg)
+            if cls._headset:
+                cls._headset.close()
+            cls._headset = SennheiserHeadset(mac=mac.upper())
+            cls._last_attempt = 0.0
 
 
 class WebRequestHandler(BaseHTTPRequestHandler):
@@ -652,6 +913,16 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"connected": False, "error": str(e)})
             return
 
+        elif path == "/api/headset/status":
+            status = HeadsetManager.get_status()
+            self._send_json(status)
+            return
+
+        elif path == "/api/headset/devices":
+            devs = find_paired_headsets()
+            self._send_json(devs)
+            return
+
         elif path == "/api/dfu/check":
             client = SennheiserCloudClient()
             dev = get_first_dongle()
@@ -681,11 +952,64 @@ class WebRequestHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
 
         dev = get_first_dongle()
-        if not dev and path != "/api/dfu/download":
+        if not dev and path != "/api/dfu/download" and not path.startswith("/api/headset/"):
             self._send_json({"error": "No dongle connected"}, status=400)
             return
 
-        if path == "/api/mode":
+        if path == "/api/headset/anc":
+            try:
+                if body.get("toggle"):
+                    new_st = HeadsetManager.toggle_anc()
+                    self._send_json({"success": True, "anc_enabled": new_st})
+                elif "enabled" in body:
+                    val = bool(body["enabled"])
+                    ok = HeadsetManager.set_anc(val)
+                    self._send_json({"success": ok, "anc_enabled": val})
+                else:
+                    self._send_json({"error": "Missing toggle or enabled"}, status=400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, status=500)
+            return
+
+        elif path == "/api/headset/transparency":
+            level = body.get("level")
+            if level is not None:
+                try:
+                    ok = HeadsetManager.set_transparency(int(level))
+                    self._send_json({"success": ok, "transparency": int(level)})
+                except Exception as e:
+                    self._send_json({"success": False, "error": str(e)}, status=500)
+            else:
+                self._send_json({"error": "Missing level"}, status=400)
+            return
+
+        elif path == "/api/headset/bass_boost":
+            try:
+                if body.get("toggle"):
+                    curr = HeadsetManager._last_state.get("bass_boost", False)
+                    new_st = not curr
+                    ok = HeadsetManager.set_bass_boost(new_st)
+                    self._send_json({"success": ok, "bass_boost": new_st})
+                elif "enabled" in body:
+                    val = bool(body["enabled"])
+                    ok = HeadsetManager.set_bass_boost(val)
+                    self._send_json({"success": ok, "bass_boost": val})
+                else:
+                    self._send_json({"error": "Missing toggle or enabled"}, status=400)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, status=500)
+            return
+
+        elif path == "/api/headset/select":
+            mac = body.get("mac")
+            if mac:
+                HeadsetManager.select_device(mac)
+                self._send_json({"success": True, "mac": mac})
+            else:
+                self._send_json({"error": "Missing mac"}, status=400)
+            return
+
+        elif path == "/api/mode":
             mode_str = body.get("mode", "")
             mode_map = {
                 "one-to-one": AudioMode.HIGH_QUALITY,
@@ -788,7 +1112,7 @@ class WebRequestHandler(BaseHTTPRequestHandler):
 
 
 def run_server(port: int = 8700, open_browser: bool = True):
-    server = HTTPServer(("127.0.0.1", port), WebRequestHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), WebRequestHandler)
     url = f"http://127.0.0.1:{port}"
     print(f"\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
     print(f"  \033[1mSennheiser Dongle Control (Linux GUI)\033[0m")

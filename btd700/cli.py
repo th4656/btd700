@@ -19,6 +19,13 @@ from .hid import find_sennheiser_hid_devices
 from .device import BTDDevice, get_first_dongle
 from .cloud import SennheiserCloudClient
 from .dfu import DFUImage
+from .headset import (
+    SennheiserHeadset,
+    find_paired_headsets,
+    get_default_mac,
+    save_config,
+    load_config,
+)
 
 
 def format_header(title: str) -> str:
@@ -324,6 +331,141 @@ def cmd_dfu(args):
             return 0
 
 
+def cmd_anc(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected.")
+        print("Please pair your HDB 630 with Linux via Bluetooth, or specify MAC with --mac XX:XX:XX:XX:XX:XX.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset ({mac}): {e}")
+        return 1
+
+    try:
+        if args.state is None:
+            # Query ANC
+            enabled = headset.get_anc_status()
+            st_color = "\033[1;32mON\033[0m" if enabled else "\033[1;31mOFF\033[0m"
+            print(f"Active Noise Cancellation (ANC): {st_color}")
+            return 0
+
+        action = args.state.lower()
+        if action == "on":
+            headset.set_anc_status(True)
+            print("Active Noise Cancellation (ANC): \033[1;32mON\033[0m")
+        elif action == "off":
+            headset.set_anc_status(False)
+            print("Active Noise Cancellation (ANC): \033[1;31mOFF\033[0m")
+        elif action == "toggle":
+            new_st = headset.toggle_anc()
+            st_color = "\033[1;32mON\033[0m" if new_st else "\033[1;31mOFF\033[0m"
+            print(f"Active Noise Cancellation (ANC) toggled to: {st_color}")
+        return 0
+    finally:
+        headset.close()
+
+
+def cmd_transparency(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected. Specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset: {e}")
+        return 1
+
+    try:
+        if args.level is None:
+            level = headset.get_transparency()
+            print(f"Transparency Level: \033[1;36m{level}%\033[0m")
+            return 0
+
+        headset.set_transparency(args.level)
+        print(f"Transparency Level set to: \033[1;32m{args.level}%\033[0m")
+        return 0
+    finally:
+        headset.close()
+
+
+def cmd_bass_boost(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected. Specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset: {e}")
+        return 1
+
+    try:
+        if args.state is None:
+            bb = headset.get_bass_boost()
+            st = "\033[1;32mON\033[0m" if bb else "\033[1;31mOFF\033[0m"
+            print(f"Bass Boost: {st}")
+            return 0
+
+        enabled = (args.state.lower() == "on")
+        headset.set_bass_boost(enabled)
+        st = "\033[1;32mON\033[0m" if enabled else "\033[1;31mOFF\033[0m"
+        print(f"Bass Boost set to: {st}")
+        return 0
+    finally:
+        headset.close()
+
+
+def cmd_headset(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected.")
+        print("Run 'btd700 headsets' to list paired devices or specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+        state = headset.get_state()
+    except Exception as e:
+        print(f"Error connecting to headset ({mac}): {e}")
+        return 1
+    finally:
+        headset.close()
+
+    print(format_header("Sennheiser Headset Status"))
+    print(f"  MAC Address:      {state['mac']}")
+    anc_st = "\033[1;32mON\033[0m" if state['anc_enabled'] else "\033[1;31mOFF\033[0m"
+    print(f"  ANC:              {anc_st}")
+    print(f"  Transparency:     \033[1;36m{state['transparency']}%\033[0m")
+    bb_st = "\033[1;32mON\033[0m" if state['bass_boost'] else "\033[1;31mOFF\033[0m"
+    print(f"  Bass Boost:       {bb_st}")
+    return 0
+
+
+def cmd_headsets(args):
+    devices = find_paired_headsets()
+    print(format_header("Paired Bluetooth Devices"))
+    if not devices:
+        print("No paired Bluetooth devices found.")
+        return 0
+
+    default_mac = get_default_mac()
+    for d in devices:
+        rec = " \033[1;32m[Recommended / Sennheiser]\033[0m" if d.get("recommended") else ""
+        active = " \033[1;36m(Current Default)\033[0m" if d['mac'] == default_mac else ""
+        print(f"  {d['mac']} - {d['name']}{rec}{active}")
+    return 0
+
+
 def cmd_web(args):
     from .web import run_server
     port = args.port or 8700
@@ -334,7 +476,7 @@ def cmd_web(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="btd700",
-        description="Sennheiser Dongle Control (BTD 600 / BTD 700) for Linux"
+        description="Sennheiser Dongle Control (BTD 600 / BTD 700 & Headset ANC) for Linux"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -360,6 +502,28 @@ def main():
     p_bcast.add_argument("--quality", choices=["sq16", "sq24", "hq"], help="Broadcast quality")
     p_bcast.add_argument("--key", type=str, help="Broadcast encryption PIN / password")
 
+    # anc (Active Noise Cancellation)
+    p_anc = sub.add_parser("anc", help="View, toggle, or set Active Noise Cancellation (ANC) on headset")
+    p_anc.add_argument("state", nargs="?", choices=["on", "off", "toggle"], help="ANC state")
+    p_anc.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # transparency
+    p_trans = sub.add_parser("transparency", help="View or set transparency mode level (0-100)")
+    p_trans.add_argument("level", nargs="?", type=int, help="Transparency level percentage (0-100)")
+    p_trans.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # bass-boost
+    p_bb = sub.add_parser("bass-boost", help="View or set Bass Boost on headset")
+    p_bb.add_argument("state", nargs="?", choices=["on", "off"], help="Bass Boost state")
+    p_bb.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # headset
+    p_headset = sub.add_parser("headset", help="Show connected Sennheiser headset status (ANC, Transparency, EQ)")
+    p_headset.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # headsets
+    sub.add_parser("headsets", aliases=["scan"], help="List paired Bluetooth headsets")
+
     # pair
     sub.add_parser("pair", help="Trigger Bluetooth pairing mode")
 
@@ -384,6 +548,12 @@ def main():
         "mode": cmd_mode,
         "codec": cmd_codec,
         "broadcast": cmd_broadcast,
+        "anc": cmd_anc,
+        "transparency": cmd_transparency,
+        "bass-boost": cmd_bass_boost,
+        "headset": cmd_headset,
+        "headsets": cmd_headsets,
+        "scan": cmd_headsets,
         "pair": cmd_pair,
         "reset": cmd_reset,
         "dfu": cmd_dfu,
