@@ -151,6 +151,22 @@ Sennheiser headphones support **Bluetooth Multipoint**. Simply pair your headpho
 # Check ANC status
 ./btd700.py anc
 
+# Dial ANC Strength directly (0% - 100%)
+# (100% = Maximum ANC, 0% = Full Transparency)
+./btd700.py anc-strength 100
+./btd700.py anc-strength 75
+./btd700.py anc-strength
+
+# Adaptive ANC (Auto adjusts cancellation to room noise)
+./btd700.py adaptive-anc on
+./btd700.py adaptive-anc off
+./btd700.py adaptive-anc
+
+# Anti-Wind Noise Reduction (off, auto, max)
+./btd700.py anti-wind auto
+./btd700.py anti-wind max
+./btd700.py anti-wind off
+
 # Transparency mode (0% - 100%)
 ./btd700.py transparency 80
 ./btd700.py transparency
@@ -160,7 +176,7 @@ Sennheiser headphones support **Bluetooth Multipoint**. Simply pair your headpho
 ./btd700.py bass-boost off
 ./btd700.py bass-boost
 
-# Full headset status summary
+# Full headset status summary (ANC, Strength, Adaptive, Wind, EQ)
 ./btd700.py headset
 
 # List paired Bluetooth devices

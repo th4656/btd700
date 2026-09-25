@@ -424,6 +424,87 @@ def cmd_bass_boost(args):
         headset.close()
 
 
+def cmd_anc_strength(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected. Specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset: {e}")
+        return 1
+
+    try:
+        if args.strength is None:
+            strength = headset.get_anc_strength()
+            print(f"ANC Strength: \033[1;32m{strength}%\033[0m")
+            return 0
+
+        headset.set_anc_strength(args.strength)
+        print(f"ANC Strength set to: \033[1;32m{args.strength}%\033[0m (Transparency: {100 - args.strength}%)")
+        return 0
+    finally:
+        headset.close()
+
+
+def cmd_adaptive_anc(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected. Specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset: {e}")
+        return 1
+
+    try:
+        if args.state is None:
+            adapt = headset.get_adaptive_anc()
+            st = "\033[1;32mON (Auto)\033[0m" if adapt else "\033[1;33mOFF (Manual)\033[0m"
+            print(f"Adaptive ANC: {st}")
+            return 0
+
+        enabled = (args.state.lower() == "on")
+        headset.set_adaptive_anc(enabled)
+        st = "\033[1;32mON (Auto)\033[0m" if enabled else "\033[1;33mOFF (Manual)\033[0m"
+        print(f"Adaptive ANC set to: {st}")
+        return 0
+    finally:
+        headset.close()
+
+
+def cmd_anti_wind(args):
+    mac = args.mac or get_default_mac()
+    if not mac:
+        print("No paired Sennheiser headset detected. Specify with --mac.")
+        return 1
+
+    headset = SennheiserHeadset(mac=mac)
+    try:
+        headset.connect()
+    except Exception as e:
+        print(f"Error connecting to headset: {e}")
+        return 1
+
+    try:
+        if args.mode is None:
+            mode = headset.get_anti_wind()
+            print(f"Anti-Wind Reduction: \033[1;36m{mode.upper()}\033[0m")
+            return 0
+
+        headset.set_anti_wind(args.mode)
+        print(f"Anti-Wind Reduction set to: \033[1;32m{args.mode.upper()}\033[0m")
+        return 0
+    finally:
+        headset.close()
+
+
 def cmd_headset(args):
     mac = args.mac or get_default_mac()
     if not mac:
@@ -444,8 +525,12 @@ def cmd_headset(args):
     print(format_header("Sennheiser Headset Status"))
     print(f"  MAC Address:      {state['mac']}")
     anc_st = "\033[1;32mON\033[0m" if state['anc_enabled'] else "\033[1;31mOFF\033[0m"
-    print(f"  ANC:              {anc_st}")
+    print(f"  ANC State:        {anc_st}")
+    print(f"  ANC Strength:     \033[1;32m{state.get('anc_strength', 0)}%\033[0m")
     print(f"  Transparency:     \033[1;36m{state['transparency']}%\033[0m")
+    adapt_st = "\033[1;32mON\033[0m" if state.get('adaptive_anc') else "\033[1;33mOFF (Manual)\033[0m"
+    print(f"  Adaptive ANC:     {adapt_st}")
+    print(f"  Anti-Wind Mode:   \033[1;36m{state.get('anti_wind', 'off').upper()}\033[0m")
     bb_st = "\033[1;32mON\033[0m" if state['bass_boost'] else "\033[1;31mOFF\033[0m"
     print(f"  Bass Boost:       {bb_st}")
     return 0
@@ -507,6 +592,21 @@ def main():
     p_anc.add_argument("state", nargs="?", choices=["on", "off", "toggle"], help="ANC state")
     p_anc.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
 
+    # anc-strength
+    p_anc_str = sub.add_parser("anc-strength", aliases=["strength", "anc-level"], help="View or set ANC strength percentage (0-100)")
+    p_anc_str.add_argument("strength", nargs="?", type=int, help="ANC strength percentage (0-100)")
+    p_anc_str.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # adaptive-anc
+    p_adap = sub.add_parser("adaptive-anc", aliases=["adaptive"], help="View or set Adaptive ANC mode (auto environmental adjustment)")
+    p_adap.add_argument("state", nargs="?", choices=["on", "off"], help="Adaptive ANC state (on=auto, off=manual)")
+    p_adap.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
+    # anti-wind
+    p_wind = sub.add_parser("anti-wind", aliases=["wind"], help="View or set Anti-Wind reduction mode")
+    p_wind.add_argument("mode", nargs="?", choices=["off", "auto", "max"], help="Anti-wind mode (off, auto, max)")
+    p_wind.add_argument("--mac", type=str, help="Headset Bluetooth MAC address")
+
     # transparency
     p_trans = sub.add_parser("transparency", help="View or set transparency mode level (0-100)")
     p_trans.add_argument("level", nargs="?", type=int, help="Transparency level percentage (0-100)")
@@ -549,6 +649,13 @@ def main():
         "codec": cmd_codec,
         "broadcast": cmd_broadcast,
         "anc": cmd_anc,
+        "anc-strength": cmd_anc_strength,
+        "strength": cmd_anc_strength,
+        "anc-level": cmd_anc_strength,
+        "adaptive-anc": cmd_adaptive_anc,
+        "adaptive": cmd_adaptive_anc,
+        "anti-wind": cmd_anti_wind,
+        "wind": cmd_anti_wind,
         "transparency": cmd_transparency,
         "bass-boost": cmd_bass_boost,
         "headset": cmd_headset,

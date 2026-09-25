@@ -404,35 +404,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- Headphone Control (ANC, Transparency, EQ) -->
+    <!-- Headphone Control (ANC, Strength, Adaptive, Transparency, EQ) -->
     <div class="panel-card" id="headsetPanel">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div class="section-title" style="margin-bottom: 0;">Headphone Controls (HDB 630 / Momentum)</div>
         <span id="headsetTag" style="font-size: 0.8rem; background: rgba(0,159,227,0.15); color: var(--accent); padding: 4px 10px; border-radius: 12px;">Bluetooth Multipoint</span>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
         <div>
-          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">Active Noise Cancellation (ANC)</label>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">ANC Power</label>
           <button class="btn btn-secondary" id="btnAnc" onclick="toggleAnc()" style="width: 100%; justify-content: center;">
             ANC: Checking...
           </button>
         </div>
         <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">Adaptive ANC</label>
+          <button class="btn btn-secondary" id="btnAdaptive" onclick="toggleAdaptiveAnc()" style="width: 100%; justify-content: center;">
+            Adaptive: Off
+          </button>
+        </div>
+        <div>
           <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 8px;">Bass Boost</label>
           <button class="btn btn-secondary" id="btnBass" onclick="toggleBass()" style="width: 100%; justify-content: center;">
-            Bass Boost: Checking...
+            Bass Boost: Off
           </button>
         </div>
       </div>
-      <div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">
-          <span>Transparency Mode</span>
-          <span id="transVal">50%</span>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">
+            <span>ANC Strength</span>
+            <span id="ancStrVal">100%</span>
+          </div>
+          <input type="range" id="ancStrSlider" min="0" max="100" value="100" onchange="changeAncStrength(this.value)" oninput="updateAncSliders(this.value, true)" style="width: 100%; accent-color: var(--accent);">
         </div>
-        <input type="range" id="transSlider" min="0" max="100" value="50" onchange="changeTransparency(this.value)" oninput="document.getElementById('transVal').innerText = this.value + '%'" style="width: 100%; accent-color: var(--accent);">
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">
+            <span>Transparency Mode</span>
+            <span id="transVal">0%</span>
+          </div>
+          <input type="range" id="transSlider" min="0" max="100" value="0" onchange="changeTransparency(this.value)" oninput="updateAncSliders(this.value, false)" style="width: 100%; accent-color: var(--accent);">
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; color: var(--text-muted);">
-        <span id="headsetDeviceLabel">Device: Auto-Detect</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>Anti-Wind:</span>
+          <select id="antiWindSelect" onchange="changeAntiWind(this.value)" style="background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-main); padding: 4px 8px; border-radius: 6px; font-size: 0.8rem;">
+            <option value="off">Off</option>
+            <option value="auto">Auto</option>
+            <option value="max">Max</option>
+          </select>
+          <span id="headsetDeviceLabel" style="margin-left: 12px;">Device: Auto-Detect</span>
+        </div>
         <button class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.75rem;" onclick="scanHeadsetDevices()">Scan / Connect</button>
       </div>
     </div>
@@ -636,28 +659,56 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    function updateAncSliders(val, isStrength) {
+      val = parseInt(val) || 0;
+      if (isStrength) {
+        document.getElementById('ancStrVal').innerText = val + '%';
+        const trans = 100 - val;
+        document.getElementById('transVal').innerText = trans + '%';
+        document.getElementById('transSlider').value = trans;
+      } else {
+        document.getElementById('transVal').innerText = val + '%';
+        const strength = 100 - val;
+        document.getElementById('ancStrVal').innerText = strength + '%';
+        document.getElementById('ancStrSlider').value = strength;
+      }
+    }
+
     async function fetchHeadsetStatus() {
       try {
         const res = await fetch('/api/headset/status');
         const data = await res.json();
         const btnAnc = document.getElementById('btnAnc');
+        const btnAdap = document.getElementById('btnAdaptive');
         const btnBass = document.getElementById('btnBass');
 
         if (data.connected || data.mac) {
           btnAnc.innerText = 'ANC: ' + (data.anc_enabled ? 'ON' : 'OFF');
           btnAnc.className = 'btn ' + (data.anc_enabled ? 'btn-primary' : 'btn-secondary');
 
+          btnAdap.innerText = 'Adaptive: ' + (data.adaptive_anc ? 'Auto' : 'Off');
+          btnAdap.className = 'btn ' + (data.adaptive_anc ? 'btn-primary' : 'btn-secondary');
+
           btnBass.innerText = 'Bass Boost: ' + (data.bass_boost ? 'ON' : 'OFF');
           btnBass.className = 'btn ' + (data.bass_boost ? 'btn-primary' : 'btn-secondary');
 
-          document.getElementById('transVal').innerText = (data.transparency || 0) + '%';
-          if (!document.getElementById('transSlider').matches(':active')) {
-            document.getElementById('transSlider').value = data.transparency || 0;
+          const trans = data.transparency || 0;
+          const strength = data.anc_enabled ? (100 - trans) : 0;
+          document.getElementById('transVal').innerText = trans + '%';
+          document.getElementById('ancStrVal').innerText = strength + '%';
+          if (!document.getElementById('transSlider').matches(':active') && !document.getElementById('ancStrSlider').matches(':active')) {
+            document.getElementById('transSlider').value = trans;
+            document.getElementById('ancStrSlider').value = strength;
+          }
+          if (data.anti_wind) {
+            document.getElementById('antiWindSelect').value = data.anti_wind;
           }
           document.getElementById('headsetDeviceLabel').innerText = 'Connected: ' + data.mac;
         } else {
-          btnAnc.innerText = 'ANC: Headset Not Connected';
+          btnAnc.innerText = 'ANC: Not Connected';
           btnAnc.className = 'btn btn-secondary';
+          btnAdap.innerText = 'Adaptive: Off';
+          btnAdap.className = 'btn btn-secondary';
           btnBass.innerText = 'Bass Boost: Off';
           btnBass.className = 'btn btn-secondary';
           document.getElementById('headsetDeviceLabel').innerText = 'Headset: Not Connected (Pair via Bluetooth)';
@@ -676,6 +727,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fetchHeadsetStatus();
     }
 
+    async function toggleAdaptiveAnc() {
+      const current = document.getElementById('btnAdaptive').innerText.includes('Auto');
+      await fetch('/api/headset/adaptive', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled: !current })
+      });
+      fetchHeadsetStatus();
+    }
+
     async function toggleBass() {
       await fetch('/api/headset/bass_boost', {
         method: 'POST',
@@ -685,11 +746,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fetchHeadsetStatus();
     }
 
+    async function changeAncStrength(val) {
+      await fetch('/api/headset/strength', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ strength: parseInt(val) })
+      });
+      fetchHeadsetStatus();
+    }
+
     async function changeTransparency(val) {
       await fetch('/api/headset/transparency', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ level: parseInt(val) })
+      });
+      fetchHeadsetStatus();
+    }
+
+    async function changeAntiWind(mode) {
+      await fetch('/api/headset/anti_wind', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mode })
       });
       fetchHeadsetStatus();
     }
@@ -840,6 +919,36 @@ class HeadsetManager:
             hs = cls._ensure_connected()
             ok = hs.set_transparency(level)
             cls._last_state["transparency"] = level
+            cls._last_state["anc_strength"] = 100 - level
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def set_anc_strength(cls, strength: int) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_anc_strength(strength)
+            cls._last_state["anc_strength"] = strength
+            cls._last_state["transparency"] = 100 - strength
+            cls._last_state["anc_enabled"] = True
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def set_adaptive_anc(cls, enabled: bool) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_adaptive_anc(enabled)
+            cls._last_state["adaptive_anc"] = enabled
+            cls._last_state["connected"] = True
+            return ok
+
+    @classmethod
+    def set_anti_wind(cls, mode: str) -> bool:
+        with cls._lock:
+            hs = cls._ensure_connected()
+            ok = hs.set_anti_wind(mode)
+            cls._last_state["anti_wind"] = mode
             cls._last_state["connected"] = True
             return ok
 
@@ -981,6 +1090,36 @@ class WebRequestHandler(BaseHTTPRequestHandler):
                     self._send_json({"success": False, "error": str(e)}, status=500)
             else:
                 self._send_json({"error": "Missing level"}, status=400)
+            return
+
+        elif path == "/api/headset/strength":
+            strength = body.get("strength")
+            if strength is not None:
+                try:
+                    ok = HeadsetManager.set_anc_strength(int(strength))
+                    self._send_json({"success": ok, "anc_strength": int(strength)})
+                except Exception as e:
+                    self._send_json({"success": False, "error": str(e)}, status=500)
+            else:
+                self._send_json({"error": "Missing strength"}, status=400)
+            return
+
+        elif path == "/api/headset/adaptive":
+            enabled = bool(body.get("enabled"))
+            try:
+                ok = HeadsetManager.set_adaptive_anc(enabled)
+                self._send_json({"success": ok, "adaptive_anc": enabled})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, status=500)
+            return
+
+        elif path == "/api/headset/anti_wind":
+            mode = str(body.get("mode", "off"))
+            try:
+                ok = HeadsetManager.set_anti_wind(mode)
+                self._send_json({"success": ok, "anti_wind": mode})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, status=500)
             return
 
         elif path == "/api/headset/bass_boost":

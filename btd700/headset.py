@@ -24,6 +24,10 @@ CMD_SET_TRANSPARENCY = 0x1A02
 CMD_GET_TRANSPARENCY = 0x1A03
 CMD_SET_ANC_STATUS = 0x1A04
 CMD_GET_ANC_STATUS = 0x1A05
+CMD_SET_ADAPTIVE_ANC = 0x1A06
+CMD_GET_ADAPTIVE_ANC = 0x1A07
+CMD_SET_ANTI_WIND = 0x1A08
+CMD_GET_ANTI_WIND = 0x1A09
 
 FEATURE_USER_EQ = 8
 FEATURE_TRANSPARENCY = 12
@@ -285,13 +289,72 @@ class SennheiserHeadset:
         vendor, command, payload = self._exchange(CMD_SET_BASS_BOOST, bytes([1 if enabled else 0]))
         return vendor == VENDOR_SENNHEISER
 
+    def get_anc_strength(self) -> int:
+        """Get ANC strength percentage (0-100%). 100% is maximum noise cancellation."""
+        if not self.get_anc_status():
+            return 0
+        return 100 - self.get_transparency()
+
+    def set_anc_strength(self, strength: int) -> bool:
+        """Set ANC strength percentage (0-100%). 100% = max noise cancellation, 0% = max transparency."""
+        strength = max(0, min(100, int(strength)))
+        if strength > 0:
+            self.set_anc_status(True)
+        transparency = 100 - strength
+        return self.set_transparency(transparency)
+
+    def get_adaptive_anc(self) -> bool:
+        """Query if Adaptive ANC is enabled."""
+        try:
+            vendor, command, payload = self._exchange(CMD_GET_ADAPTIVE_ANC, timeout=1.5)
+            if vendor == VENDOR_SENNHEISER and payload:
+                return bool(payload[0])
+        except Exception:
+            pass
+        return False
+
+    def set_adaptive_anc(self, enabled: bool) -> bool:
+        """Turn Adaptive ANC ON (auto adjusts) or OFF (fixed level)."""
+        try:
+            vendor, command, payload = self._exchange(CMD_SET_ADAPTIVE_ANC, bytes([1 if enabled else 0]), timeout=1.5)
+            return vendor == VENDOR_SENNHEISER
+        except Exception:
+            return False
+
+    def get_anti_wind(self) -> str:
+        """Get anti-wind reduction mode ('off', 'auto', 'max')."""
+        try:
+            vendor, command, payload = self._exchange(CMD_GET_ANTI_WIND, timeout=1.5)
+            if vendor == VENDOR_SENNHEISER and payload:
+                val = payload[0]
+                return {0: "off", 1: "auto", 2: "max"}.get(val, "off")
+        except Exception:
+            pass
+        return "off"
+
+    def set_anti_wind(self, mode: str) -> bool:
+        """Set anti-wind reduction mode ('off', 'auto', 'max')."""
+        m_map = {"off": 0, "auto": 1, "max": 2}
+        val = m_map.get(mode.lower(), 0)
+        try:
+            vendor, command, payload = self._exchange(CMD_SET_ANTI_WIND, bytes([val]), timeout=1.5)
+            return vendor == VENDOR_SENNHEISER
+        except Exception:
+            return False
+
     def get_state(self) -> Dict[str, Any]:
-        """Fetch complete headset state (ANC, Transparency, Bass Boost)."""
+        """Fetch complete headset state (ANC, Strength, Transparency, Bass Boost, Wind)."""
+        anc_on = self.get_anc_status()
+        trans = self.get_transparency()
         return {
             "mac": self.mac,
             "connected": self.is_connected(),
-            "anc_enabled": self.get_anc_status(),
-            "transparency": self.get_transparency(),
+            "anc_enabled": anc_on,
+            "anc_strength": (100 - trans) if anc_on else 0,
+            "transparency": trans,
+            "adaptive_anc": self.get_adaptive_anc(),
+            "anti_wind": self.get_anti_wind(),
             "bass_boost": self.get_bass_boost(),
             "channel": self.channel,
         }
+
