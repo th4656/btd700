@@ -7,7 +7,7 @@
 #include <QJsonArray>
 #include <QMessageBox>
 #include <QInputDialog>
-#include <QGraphicsDropShadowEffect>
+#include <QThreadPool>
 
 extern "C" {
     char* btd_get_dongle_status_json();
@@ -29,6 +29,31 @@ extern "C" {
     void btd_free_string(char* s);
 }
 
+void StatusWorker::run() {
+    while (m_running) {
+        char *rawDongle = btd_get_dongle_status_json();
+        if (rawDongle) {
+            QString json = QString::fromUtf8(rawDongle);
+            btd_free_string(rawDongle);
+            emit dongleStatusReceived(json);
+        }
+
+        if (!m_running) break;
+
+        char *rawHeadset = btd_get_headset_status_json();
+        if (rawHeadset) {
+            QString json = QString::fromUtf8(rawHeadset);
+            btd_free_string(rawHeadset);
+            emit headsetStatusReceived(json);
+        }
+
+        // Sleep 1200ms in 100ms slices for instant cancellation
+        for (int i = 0; i < 12 && m_running; ++i) {
+            QThread::msleep(100);
+        }
+    }
+}
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setWindowTitle("Sennheiser Dongle Control (Linux Qt6)");
     resize(760, 850);
@@ -37,11 +62,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setupUi();
     applyDarkTheme();
 
-    m_pollTimer = new QTimer(this);
-    connect(m_pollTimer, &QTimer::timeout, this, &MainWindow::refreshAll);
-    m_pollTimer->start(2000);
+    m_worker = new StatusWorker(this);
+    connect(m_worker, &StatusWorker::dongleStatusReceived, this, &MainWindow::onDongleStatusReceived);
+    connect(m_worker, &StatusWorker::headsetStatusReceived, this, &MainWindow::onHeadsetStatusReceived);
+    m_worker->start();
+}
 
-    refreshAll();
+MainWindow::~MainWindow() {
+    if (m_worker) {
+        m_worker->stop();
+    }
 }
 
 void MainWindow::setupUi() {
@@ -100,7 +130,7 @@ void MainWindow::setupUi() {
     m_btnModeGaming->setMinimumHeight(64);
     connect(m_btnModeGaming, &QPushButton::clicked, [this]() { onModeClicked("gaming"); });
 
-    m_btnModeBroadcast = new QPushButton("📡 Auracast™\nPublic Broadcast", modeGroup);
+    m_btnModeBroadcast = new QPushButton("📡 Auracast™\nBroadcast Stream", modeGroup);
     m_btnModeBroadcast->setCheckable(true);
     m_btnModeBroadcast->setMinimumHeight(64);
     connect(m_btnModeBroadcast, &QPushButton::clicked, [this]() { onModeClicked("broadcast"); });
@@ -110,42 +140,38 @@ void MainWindow::setupUi() {
     modeLayout->addWidget(m_btnModeBroadcast);
     contentLayout->addWidget(modeGroup);
 
-    // Stream Details & Codecs
-    auto *detailsGroup = new QGroupBox("Stream & Codecs", scrollContent);
-    auto *detailsLayout = new QVBoxLayout(detailsGroup);
+    // Stream Details Card
+    auto *streamGroup = new QGroupBox("Live Audio Stream", scrollContent);
+    auto *streamLayout = new QGridLayout(streamGroup);
+    streamLayout->setHorizontalSpacing(24);
+    streamLayout->setVerticalSpacing(10);
 
-    auto *grid = new QGridLayout();
-    grid->addWidget(new QLabel("Active Codec:", detailsGroup), 0, 0);
-    m_activeCodecLabel = new QLabel("-", detailsGroup);
-    m_activeCodecLabel->setStyleSheet("font-weight: bold; color: #009fe3;");
-    grid->addWidget(m_activeCodecLabel, 0, 1);
+    auto addStreamMetric = [&](const QString &label, QLabel* &valWidget, int row, int col) {
+        auto *lbl = new QLabel(label, streamGroup);
+        lbl->setStyleSheet("color: #8c93a0; font-size: 12px; font-weight: normal;");
+        valWidget = new QLabel("-", streamGroup);
+        valWidget->setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold;");
+        streamLayout->addWidget(lbl, row, col);
+        streamLayout->addWidget(valWidget, row + 1, col);
+    };
 
-    grid->addWidget(new QLabel("Sample Rate:", detailsGroup), 0, 2);
-    m_sampleRateLabel = new QLabel("-", detailsGroup);
-    grid->addWidget(m_sampleRateLabel, 0, 3);
+    addStreamMetric("ACTIVE CODEC", m_activeCodecLabel, 0, 0);
+    addStreamMetric("SAMPLE RATE", m_sampleRateLabel, 0, 1);
+    addStreamMetric("BIT DEPTH", m_bitDepthLabel, 0, 2);
+    addStreamMetric("TRANSPORT", m_transportLabel, 0, 3);
 
-    grid->addWidget(new QLabel("Bit Depth:", detailsGroup), 1, 0);
-    m_bitDepthLabel = new QLabel("-", detailsGroup);
-    grid->addWidget(m_bitDepthLabel, 1, 1);
+    contentLayout->addWidget(streamGroup);
 
-    grid->addWidget(new QLabel("Transport:", detailsGroup), 1, 2);
-    m_transportLabel = new QLabel("-", detailsGroup);
-    grid->addWidget(m_transportLabel, 1, 3);
-
-    detailsLayout->addLayout(grid);
-
-    auto *codecTitle = new QLabel("Supported Codecs (Click to switch):", detailsGroup);
-    codecTitle->setStyleSheet("font-size: 12px; color: #8c93a0; margin-top: 8px;");
-    detailsLayout->addWidget(codecTitle);
-
+    // Supported Codecs Switcher
+    auto *codecsGroup = new QGroupBox("Available Codecs", scrollContent);
+    auto *codecsMainLayout = new QVBoxLayout(codecsGroup);
     m_codecsLayout = new QHBoxLayout();
     m_codecsLayout->setSpacing(8);
-    detailsLayout->addLayout(m_codecsLayout);
+    codecsMainLayout->addLayout(m_codecsLayout);
+    contentLayout->addWidget(codecsGroup);
 
-    contentLayout->addWidget(detailsGroup);
-
-    // Headphone Controls Card (HDB 630 / Momentum)
-    auto *headsetGroup = new QGroupBox("Headphone Controls (HDB 630 / Momentum)", scrollContent);
+    // Sennheiser Headset Controls (HDB 630 / Momentum 4)
+    auto *headsetGroup = new QGroupBox("HDB 630 / Sennheiser Headset Controls", scrollContent);
     auto *headsetLayout = new QVBoxLayout(headsetGroup);
     headsetLayout->setSpacing(14);
 
@@ -180,7 +206,8 @@ void MainWindow::setupUi() {
     m_ancStrengthSlider = new QSlider(Qt::Horizontal, headsetGroup);
     m_ancStrengthSlider->setRange(0, 100);
     m_ancStrengthSlider->setValue(100);
-    connect(m_ancStrengthSlider, &QSlider::valueChanged, this, &MainWindow::onAncStrengthChanged);
+    connect(m_ancStrengthSlider, &QSlider::sliderMoved, this, &MainWindow::onAncStrengthSliderMoved);
+    connect(m_ancStrengthSlider, &QSlider::sliderReleased, this, &MainWindow::onAncStrengthReleased);
     slidersGrid->addWidget(m_ancStrengthSlider, 1, 0);
 
     auto *transLabelLayout = new QHBoxLayout();
@@ -193,7 +220,8 @@ void MainWindow::setupUi() {
     m_transSlider = new QSlider(Qt::Horizontal, headsetGroup);
     m_transSlider->setRange(0, 100);
     m_transSlider->setValue(0);
-    connect(m_transSlider, &QSlider::valueChanged, this, &MainWindow::onTransparencyChanged);
+    connect(m_transSlider, &QSlider::sliderMoved, this, &MainWindow::onTransparencySliderMoved);
+    connect(m_transSlider, &QSlider::sliderReleased, this, &MainWindow::onTransparencyReleased);
     slidersGrid->addWidget(m_transSlider, 1, 1);
 
     headsetLayout->addLayout(slidersGrid);
@@ -342,181 +370,228 @@ void MainWindow::applyDarkTheme() {
             background: #0f1115;
             width: 8px;
         }
-        QScrollBar::handle:vertical {
+        QScrollBar:handle:vertical {
             background: #282d37;
             border-radius: 4px;
         }
     )");
 }
 
-void MainWindow::refreshAll() {
-    // 1. Dongle Status
-    char *rawDongle = btd_get_dongle_status_json();
-    if (rawDongle) {
-        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(rawDongle));
-        btd_free_string(rawDongle);
+void MainWindow::onDongleStatusReceived(const QString &rawDongle) {
+    QJsonDocument doc = QJsonDocument::fromJson(rawDongle.toUtf8());
+    if (!doc.isObject()) return;
+    QJsonObject obj = doc.object();
 
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            bool connected = obj["connected"].toBool();
-            if (connected) {
-                QString state = obj["dongle_state"].toString("Connected");
-                m_statusBadge->setText(state);
-                m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4);");
-                m_modelLabel->setText(obj["model"].toString("Sennheiser BTD 700") + " • " + obj["serial"].toString(""));
+    bool connected = obj["connected"].toBool();
+    if (connected) {
+        QString state = obj["dongle_state"].toString("Connected");
+        m_statusBadge->setText(state);
+        m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4);");
+        m_modelLabel->setText(obj["model"].toString("Sennheiser BTD 700") + " • " + obj["serial"].toString(""));
 
-                QString mode = obj["audio_mode"].toString().toLower();
-                m_btnModeHQ->setChecked(mode.contains("high") || mode.contains("one"));
-                m_btnModeGaming->setChecked(mode.contains("gaming"));
-                m_btnModeBroadcast->setChecked(mode.contains("broadcast"));
+        QString mode = obj["audio_mode"].toString().toLower();
+        m_btnModeHQ->setChecked(mode.contains("high") || mode.contains("one"));
+        m_btnModeGaming->setChecked(mode.contains("gaming"));
+        m_btnModeBroadcast->setChecked(mode.contains("broadcast"));
 
-                m_activeCodecLabel->setText(obj["codec_in_use"].toString("-"));
-                m_sampleRateLabel->setText(obj["frequency"].toString("-"));
-                m_bitDepthLabel->setText(obj["resolution"].toString("-"));
-                m_transportLabel->setText(obj["connected_transport"].toString(obj["transport_mode"].toString("-")));
+        m_activeCodecLabel->setText(obj["codec_in_use"].toString("-"));
+        m_sampleRateLabel->setText(obj["frequency"].toString("-"));
+        m_bitDepthLabel->setText(obj["resolution"].toString("-"));
+        m_transportLabel->setText(obj["connected_transport"].toString(obj["transport_mode"].toString("-")));
 
-                // Update Codecs list
-                QJsonArray codecs = obj["supported_codecs"].toArray();
-                while (QLayoutItem *item = m_codecsLayout->takeAt(0)) {
-                    if (item->widget()) item->widget()->deleteLater();
-                    delete item;
-                }
-                m_codecButtons.clear();
+        // Update Codecs list with diffing (prevent widget thrashing)
+        QJsonArray codecs = obj["supported_codecs"].toArray();
+        QString sig;
+        for (const auto &cVal : codecs) {
+            sig += cVal.toObject()["name"].toString() + ";";
+        }
 
-                for (const auto &cVal : codecs) {
-                    QJsonObject cObj = cVal.toObject();
-                    QString cName = cObj["name"].toString();
-                    int bit = cObj["bit"].toInt();
-                    bool active = cObj["is_active"].toBool();
+        if (sig != m_lastCodecSignature) {
+            m_lastCodecSignature = sig;
+            while (QLayoutItem *item = m_codecsLayout->takeAt(0)) {
+                if (item->widget()) item->widget()->deleteLater();
+                delete item;
+            }
+            m_codecButtons.clear();
 
-                    auto *b = new QPushButton(cName, this);
-                    b->setCheckable(true);
-                    b->setChecked(active);
-                    connect(b, &QPushButton::clicked, [this, bit]() { onCodecClicked(bit); });
-                    m_codecsLayout->addWidget(b);
-                    m_codecButtons.append(b);
-                }
+            for (const auto &cVal : codecs) {
+                QJsonObject cObj = cVal.toObject();
+                QString cName = cObj["name"].toString();
+                int bit = cObj["bit"].toInt();
+                bool active = cObj["is_active"].toBool();
 
-                if (!m_bcastNameEdit->hasFocus()) {
-                    m_bcastNameEdit->setText(obj["broadcast_name"].toString());
-                }
-            } else {
-                m_statusBadge->setText("Dongle Missing");
-                m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);");
-                m_modelLabel->setText("Please plug in your Sennheiser BTD adapter");
+                auto *b = new QPushButton(cName, this);
+                b->setCheckable(true);
+                b->setChecked(active);
+                b->setProperty("codec_bit", bit);
+                connect(b, &QPushButton::clicked, [this, bit]() { onCodecClicked(bit); });
+                m_codecsLayout->addWidget(b);
+                m_codecButtons.append(b);
+            }
+        } else {
+            // Just update check states
+            for (int i = 0; i < codecs.size() && i < m_codecButtons.size(); ++i) {
+                bool active = codecs[i].toObject()["is_active"].toBool();
+                m_codecButtons[i]->setChecked(active);
             }
         }
+
+        if (!m_bcastNameEdit->hasFocus()) {
+            m_bcastNameEdit->setText(obj["broadcast_name"].toString());
+        }
+    } else {
+        m_statusBadge->setText("Dongle Missing");
+        m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);");
+        m_modelLabel->setText("Please plug in your Sennheiser BTD adapter");
     }
+}
 
-    // 2. Headset Status
-    char *rawHeadset = btd_get_headset_status_json();
-    if (rawHeadset) {
-        QJsonDocument doc = QJsonDocument::fromJson(QByteArray(rawHeadset));
-        btd_free_string(rawHeadset);
+void MainWindow::onHeadsetStatusReceived(const QString &rawHeadset) {
+    QJsonDocument doc = QJsonDocument::fromJson(rawHeadset.toUtf8());
+    if (!doc.isObject()) return;
+    QJsonObject obj = doc.object();
 
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            bool connected = obj["connected"].toBool();
-            QString mac = obj["mac"].toString();
+    bool connected = obj["connected"].toBool();
+    QString mac = obj["mac"].toString();
 
-            if (connected || !mac.isEmpty()) {
-                bool anc = obj["anc_enabled"].toBool();
-                m_btnAnc->setText(anc ? "ANC: ON" : "ANC: OFF");
-                m_btnAnc->setStyleSheet(anc ? "background: #009fe3; color: white;" : "");
+    if (connected || !mac.isEmpty()) {
+        bool anc = obj["anc_enabled"].toBool();
+        m_btnAnc->setText(anc ? "ANC: ON" : "ANC: OFF");
+        m_btnAnc->setStyleSheet(anc ? "background: #009fe3; color: white;" : "");
 
-                bool adapt = obj["adaptive_anc"].toBool();
-                m_btnAdaptive->setText(adapt ? "Adaptive: Auto" : "Adaptive: Off");
-                m_btnAdaptive->setStyleSheet(adapt ? "background: #009fe3; color: white;" : "");
+        bool adapt = obj["adaptive_anc"].toBool();
+        m_btnAdaptive->setText(adapt ? "Adaptive: Auto" : "Adaptive: Off");
+        m_btnAdaptive->setStyleSheet(adapt ? "background: #009fe3; color: white;" : "");
 
-                bool bb = obj["bass_boost"].toBool();
-                m_btnBass->setText(bb ? "Bass Boost: ON" : "Bass Boost: OFF");
-                m_btnBass->setStyleSheet(bb ? "background: #009fe3; color: white;" : "");
+        bool bb = obj["bass_boost"].toBool();
+        m_btnBass->setText(bb ? "Bass Boost: ON" : "Bass Boost: OFF");
+        m_btnBass->setStyleSheet(bb ? "background: #009fe3; color: white;" : "");
 
-                int trans = obj["transparency"].toInt(0);
-                int strength = anc ? (100 - trans) : 0;
+        int trans = obj["transparency"].toInt(0);
+        int strength = anc ? (100 - trans) : 0;
 
-                if (!m_ancStrengthSlider->isSliderDown()) {
-                    m_ancStrengthSlider->blockSignals(true);
-                    m_ancStrengthSlider->setValue(strength);
-                    m_ancStrengthSlider->blockSignals(false);
-                    m_ancStrengthVal->setText(QString::number(strength) + "%");
-                }
-                if (!m_transSlider->isSliderDown()) {
-                    m_transSlider->blockSignals(true);
-                    m_transSlider->setValue(trans);
-                    m_transSlider->blockSignals(false);
-                    m_transVal->setText(QString::number(trans) + "%");
-                }
-
-                QString wind = obj["anti_wind"].toString("off").toLower();
-                m_antiWindCombo->blockSignals(true);
-                if (wind == "max") m_antiWindCombo->setCurrentIndex(2);
-                else if (wind == "auto") m_antiWindCombo->setCurrentIndex(1);
-                else m_antiWindCombo->setCurrentIndex(0);
-                m_antiWindCombo->blockSignals(false);
-
-                m_headsetDeviceLabel->setText("Connected: " + mac);
-            } else {
-                m_btnAnc->setText("ANC: Disconnected");
-                m_btnAnc->setStyleSheet("");
-                m_headsetDeviceLabel->setText("Pair HDB 630 via Bluetooth settings");
-            }
+        if (!m_ancStrengthSlider->isSliderDown()) {
+            m_ancStrengthSlider->blockSignals(true);
+            m_ancStrengthSlider->setValue(strength);
+            m_ancStrengthSlider->blockSignals(false);
+            m_ancStrengthVal->setText(QString::number(strength) + "%");
         }
+        if (!m_transSlider->isSliderDown()) {
+            m_transSlider->blockSignals(true);
+            m_transSlider->setValue(trans);
+            m_transSlider->blockSignals(false);
+            m_transVal->setText(QString::number(trans) + "%");
+        }
+
+        if (!m_antiWindCombo->hasFocus()) {
+            QString wind = obj["anti_wind"].toString("off").toLower();
+            m_antiWindCombo->blockSignals(true);
+            if (wind == "max") m_antiWindCombo->setCurrentIndex(2);
+            else if (wind == "auto") m_antiWindCombo->setCurrentIndex(1);
+            else m_antiWindCombo->setCurrentIndex(0);
+            m_antiWindCombo->blockSignals(false);
+        }
+
+        m_headsetDeviceLabel->setText("Connected: " + mac);
+    } else {
+        m_btnAnc->setText("ANC: Disconnected");
+        m_btnAnc->setStyleSheet("");
+        m_headsetDeviceLabel->setText("Pair HDB 630 via Bluetooth settings");
     }
 }
 
 void MainWindow::onModeClicked(const QString &mode) {
-    btd_set_mode(mode.toUtf8().constData());
-    refreshAll();
+    m_btnModeHQ->setChecked(mode == "one-to-one");
+    m_btnModeGaming->setChecked(mode == "gaming");
+    m_btnModeBroadcast->setChecked(mode == "broadcast");
+
+    QThreadPool::globalInstance()->start([mode]() {
+        btd_set_mode(mode.toUtf8().constData());
+    });
 }
 
 void MainWindow::onCodecClicked(int bit) {
-    btd_set_codec(static_cast<uint8_t>(bit));
-    refreshAll();
+    for (auto *b : m_codecButtons) {
+        b->setChecked(b->property("codec_bit").toInt() == bit);
+    }
+
+    QThreadPool::globalInstance()->start([bit]() {
+        btd_set_codec(static_cast<uint8_t>(bit));
+    });
 }
 
 void MainWindow::onToggleAnc() {
-    btd_toggle_anc();
-    refreshAll();
+    bool currentOn = m_btnAnc->text().contains("ON");
+    bool newOn = !currentOn;
+    m_btnAnc->setText(newOn ? "ANC: ON" : "ANC: OFF");
+    m_btnAnc->setStyleSheet(newOn ? "background: #009fe3; color: white;" : "");
+
+    QThreadPool::globalInstance()->start([]() {
+        btd_toggle_anc();
+    });
 }
 
 void MainWindow::onToggleAdaptive() {
     bool isAuto = m_btnAdaptive->text().contains("Auto");
-    btd_set_adaptive_anc(!isAuto);
-    refreshAll();
+    bool newAuto = !isAuto;
+    m_btnAdaptive->setText(newAuto ? "Adaptive: Auto" : "Adaptive: Off");
+    m_btnAdaptive->setStyleSheet(newAuto ? "background: #009fe3; color: white;" : "");
+
+    QThreadPool::globalInstance()->start([newAuto]() {
+        btd_set_adaptive_anc(newAuto);
+    });
 }
 
 void MainWindow::onToggleBass() {
     bool isBass = m_btnBass->text().contains("ON");
-    btd_set_bass_boost(!isBass);
-    refreshAll();
+    bool newBass = !isBass;
+    m_btnBass->setText(newBass ? "Bass Boost: ON" : "Bass Boost: OFF");
+    m_btnBass->setStyleSheet(newBass ? "background: #009fe3; color: white;" : "");
+
+    QThreadPool::globalInstance()->start([newBass]() {
+        btd_set_bass_boost(newBass);
+    });
 }
 
-void MainWindow::onAncStrengthChanged(int val) {
+void MainWindow::onAncStrengthSliderMoved(int val) {
     m_ancStrengthVal->setText(QString::number(val) + "%");
     int trans = 100 - val;
     m_transVal->setText(QString::number(trans) + "%");
+
     m_transSlider->blockSignals(true);
     m_transSlider->setValue(trans);
     m_transSlider->blockSignals(false);
-
-    btd_set_anc_strength(val);
 }
 
-void MainWindow::onTransparencyChanged(int val) {
+void MainWindow::onAncStrengthReleased() {
+    int val = m_ancStrengthSlider->value();
+    QThreadPool::globalInstance()->start([val]() {
+        btd_set_anc_strength(val);
+    });
+}
+
+void MainWindow::onTransparencySliderMoved(int val) {
     m_transVal->setText(QString::number(val) + "%");
     int strength = 100 - val;
     m_ancStrengthVal->setText(QString::number(strength) + "%");
+
     m_ancStrengthSlider->blockSignals(true);
     m_ancStrengthSlider->setValue(strength);
     m_ancStrengthSlider->blockSignals(false);
+}
 
-    btd_set_transparency(val);
+void MainWindow::onTransparencyReleased() {
+    int val = m_transSlider->value();
+    QThreadPool::globalInstance()->start([val]() {
+        btd_set_transparency(val);
+    });
 }
 
 void MainWindow::onAntiWindChanged(int index) {
-    const char* mode = (index == 2) ? "max" : (index == 1 ? "auto" : "off");
-    btd_set_anti_wind(mode);
+    QThreadPool::globalInstance()->start([index]() {
+        const char* mode = (index == 2) ? "max" : (index == 1 ? "auto" : "off");
+        btd_set_anti_wind(mode);
+    });
 }
 
 void MainWindow::onApplyBroadcast() {
@@ -524,55 +599,68 @@ void MainWindow::onApplyBroadcast() {
     int quality = m_bcastQualityCombo->currentData().toInt();
     QString key = m_bcastKeyEdit->text();
 
-    btd_set_broadcast(1, name.toUtf8().constData(), quality, key.toUtf8().constData());
-    refreshAll();
+    QThreadPool::globalInstance()->start([name, quality, key]() {
+        btd_set_broadcast(1, name.toUtf8().constData(), quality, key.toUtf8().constData());
+    });
 }
 
 void MainWindow::onTriggerPairing() {
-    if (btd_pair()) {
-        QMessageBox::information(this, "Pairing Mode", "Triggered Bluetooth pairing mode on dongle.");
-    }
+    QThreadPool::globalInstance()->start([this]() {
+        if (btd_pair()) {
+            QMetaObject::invokeMethod(this, [this]() {
+                QMessageBox::information(this, "Pairing Mode", "Triggered Bluetooth pairing mode on dongle.");
+            });
+        }
+    });
 }
 
 void MainWindow::onFactoryReset() {
     auto res = QMessageBox::warning(this, "Factory Reset", "Are you sure you want to restore the dongle to factory settings?", QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
-        btd_reset();
-        refreshAll();
+        QThreadPool::globalInstance()->start([]() {
+            btd_reset();
+        });
     }
 }
 
 void MainWindow::onScanHeadsets() {
-    char *raw = btd_get_headset_devices_json();
-    if (!raw) return;
+    QThreadPool::globalInstance()->start([this]() {
+        char *raw = btd_get_headset_devices_json();
+        if (!raw) return;
 
-    QJsonDocument doc = QJsonDocument::fromJson(QByteArray(raw));
-    btd_free_string(raw);
+        QString json = QString::fromUtf8(raw);
+        btd_free_string(raw);
 
-    if (!doc.isArray()) return;
-    QJsonArray arr = doc.array();
-    if (arr.isEmpty()) {
-        QMessageBox::information(this, "No Devices", "No paired Bluetooth devices found.\nPlease pair your HDB 630 in Linux Bluetooth settings.");
-        return;
-    }
+        QMetaObject::invokeMethod(this, [this, json]() {
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+            if (!doc.isArray()) return;
+            QJsonArray arr = doc.array();
+            if (arr.isEmpty()) {
+                QMessageBox::information(this, "No Devices", "No paired Bluetooth devices found.\nPlease pair your HDB 630 in Linux Bluetooth settings.");
+                return;
+            }
 
-    QStringList items;
-    QStringList macs;
-    for (const auto &val : arr) {
-        QJsonObject o = val.toObject();
-        QString mac = o["mac"].toString();
-        QString name = o["name"].toString();
-        items.append(name + " (" + mac + ")");
-        macs.append(mac);
-    }
+            QStringList items;
+            QStringList macs;
+            for (const auto &val : arr) {
+                QJsonObject o = val.toObject();
+                QString mac = o["mac"].toString();
+                QString name = o["name"].toString();
+                items.append(name + " (" + mac + ")");
+                macs.append(mac);
+            }
 
-    bool ok = false;
-    QString chosen = QInputDialog::getItem(this, "Select Headset", "Choose paired Sennheiser headset:", items, 0, false, &ok);
-    if (ok && !chosen.isEmpty()) {
-        int idx = items.indexOf(chosen);
-        if (idx >= 0 && idx < macs.size()) {
-            btd_select_headset(macs[idx].toUtf8().constData());
-            refreshAll();
-        }
-    }
+            bool ok = false;
+            QString chosen = QInputDialog::getItem(this, "Select Headset", "Choose paired Sennheiser headset:", items, 0, false, &ok);
+            if (ok && !chosen.isEmpty()) {
+                int idx = items.indexOf(chosen);
+                if (idx >= 0 && idx < macs.size()) {
+                    QString selectedMac = macs[idx];
+                    QThreadPool::globalInstance()->start([selectedMac]() {
+                        btd_select_headset(selectedMac.toUtf8().constData());
+                    });
+                }
+            }
+        });
+    });
 }

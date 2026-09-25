@@ -81,7 +81,7 @@ impl BTDDevice {
         let timeout = Duration::from_millis(timeout_ms);
 
         while start.elapsed() < timeout {
-            if let Ok(Some(raw)) = self.hid.read_report(150) {
+            if let Ok(Some(raw)) = self.hid.read_report(20) {
                 if let Some((resp_cmd, payload)) = Protocol::parse_response(&raw) {
                     if resp_cmd == expected_cmd || (expected_cmd == 1 && resp_cmd == 1) || (expected_cmd == 21 && resp_cmd == 21) {
                         return Some((resp_cmd, payload));
@@ -108,8 +108,10 @@ impl BTDDevice {
             return st;
         }
 
+        const CMD_TIMEOUT: u64 = 80;
+
         // 1. Dongle State
-        if let Some((_, p)) = self.send_command(HostCmd::GetDongleState, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetDongleState, &[], CMD_TIMEOUT) {
             if !p.is_empty() {
                 st.dongle_state_code = p[0];
                 st.dongle_state = dongle_state_str(p[0]).to_string();
@@ -117,7 +119,7 @@ impl BTDDevice {
         }
 
         // 2. Audio Mode & Transport
-        if let Some((_, p)) = self.send_command(HostCmd::GetAudioModeAndTransport, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetAudioModeAndTransport, &[], CMD_TIMEOUT) {
             if p.len() >= 2 {
                 let am = AudioMode::from_u8(p[0]);
                 let tm = TransportMode::from_u8(p[1]);
@@ -134,7 +136,7 @@ impl BTDDevice {
         }
 
         // 3. Audio Quality
-        if let Some((_, p)) = self.send_command(HostCmd::GetAudioQuality, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetAudioQuality, &[], CMD_TIMEOUT) {
             if p.len() >= 2 {
                 st.frequency = audio_frequency_str(p[0]).to_string();
                 st.resolution = audio_resolution_str(p[1]).to_string();
@@ -143,7 +145,7 @@ impl BTDDevice {
 
         // 4. Codec in use
         let mut active_bit = None;
-        if let Some((_, p)) = self.send_command(HostCmd::GetCodecInUse, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetCodecInUse, &[], CMD_TIMEOUT) {
             if !p.is_empty() {
                 let mask = p[0];
                 for b in 0..6 {
@@ -160,7 +162,7 @@ impl BTDDevice {
         }
 
         // 5. Supported Codecs
-        if let Some((_, p)) = self.send_command(HostCmd::GetSupportedCodec, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetSupportedCodec, &[], CMD_TIMEOUT) {
             if !p.is_empty() {
                 let mask = p[0];
                 let mut list = Vec::new();
@@ -181,7 +183,7 @@ impl BTDDevice {
         }
 
         // 6. Broadcast Info
-        if let Some((_, p)) = self.send_command(HostCmd::GetBroadcastInfo, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetBroadcastInfo, &[], CMD_TIMEOUT) {
             if p.len() >= 3 {
                 st.broadcast_enabled = p[0] == 1;
                 st.broadcast_quality_code = p[1];
@@ -191,7 +193,7 @@ impl BTDDevice {
         }
 
         // 7. Broadcast Name
-        if let Some((_, p)) = self.send_command(HostCmd::GetBroadcastName, &[], 500) {
+        if let Some((_, p)) = self.send_command(HostCmd::GetBroadcastName, &[], CMD_TIMEOUT) {
             st.broadcast_name = String::from_utf8_lossy(&p).to_string();
         }
 

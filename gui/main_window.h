@@ -7,28 +7,58 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QGroupBox>
-#include <QTimer>
 #include <QFrame>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
+#include <QThread>
+#include <atomic>
+
+class StatusWorker : public QThread {
+    Q_OBJECT
+
+public:
+    explicit StatusWorker(QObject *parent = nullptr) : QThread(parent), m_running(true) {}
+    ~StatusWorker() override {
+        stop();
+    }
+
+    void stop() {
+        m_running = false;
+        wait();
+    }
+
+signals:
+    void dongleStatusReceived(const QString &json);
+    void headsetStatusReceived(const QString &json);
+
+protected:
+    void run() override;
+
+private:
+    std::atomic<bool> m_running{true};
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow() override = default;
+    ~MainWindow() override;
 
 private slots:
-    void refreshAll();
+    void onDongleStatusReceived(const QString &json);
+    void onHeadsetStatusReceived(const QString &json);
+
     void onModeClicked(const QString &mode);
     void onCodecClicked(int bit);
     void onToggleAnc();
     void onToggleAdaptive();
     void onToggleBass();
-    void onAncStrengthChanged(int val);
-    void onTransparencyChanged(int val);
+    void onAncStrengthSliderMoved(int val);
+    void onTransparencySliderMoved(int val);
+    void onAncStrengthReleased();
+    void onTransparencyReleased();
     void onAntiWindChanged(int index);
     void onApplyBroadcast();
     void onTriggerPairing();
@@ -39,10 +69,11 @@ private:
     void setupUi();
     void applyDarkTheme();
 
+    StatusWorker *m_worker;
+
     // Dongle Status Widgets
     QLabel *m_statusBadge;
     QLabel *m_modelLabel;
-    QLabel *m_serialLabel;
 
     // Mode Buttons / Cards
     QPushButton *m_btnModeHQ;
@@ -58,6 +89,7 @@ private:
     // Codec Badges
     QHBoxLayout *m_codecsLayout;
     QList<QPushButton*> m_codecButtons;
+    QString m_lastCodecSignature;
 
     // Auracast Inputs
     QLineEdit *m_bcastNameEdit;
@@ -74,7 +106,4 @@ private:
     QLabel *m_transVal;
     QComboBox *m_antiWindCombo;
     QLabel *m_headsetDeviceLabel;
-
-    // Timer
-    QTimer *m_pollTimer;
 };
