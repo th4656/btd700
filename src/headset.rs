@@ -366,26 +366,25 @@ impl SennheiserHeadset {
         }
 
         let mut cfg = load_config();
+        let mut channels = COMMON_RFCOMM_CHANNELS.to_vec();
         if let Some(cached) = cfg.cached_channel {
-            if self.connect_channel(cached, timeout).is_ok() {
-                if let Ok((v, c, _)) = self.exchange(GAIA_CMD_GET_ANC_STATUS, &[], Duration::from_millis(500)) {
-                    if v == VENDOR_SENNHEISER && c == (GAIA_CMD_GET_ANC_STATUS | 0x0100) {
-                        return Ok(cached);
-                    }
-                }
-                self.close();
+            if let Some(pos) = channels.iter().position(|&c| c == cached) {
+                channels.remove(pos);
+                channels.insert(0, cached);
+            } else {
+                channels.insert(0, cached);
             }
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionRefused,
-                format!("Failed to connect to headset on cached channel {cached}"),
-            ));
         }
 
-        let channels = [2, 1];
+        let exchange_timeout = Duration::from_millis(1500);
+
         for &ch in &channels {
             if self.connect_channel(ch, timeout).is_ok() {
-                if let Ok((v, c, _)) = self.exchange(GAIA_CMD_GET_ANC_STATUS, &[], Duration::from_millis(500)) {
-                    if v == VENDOR_SENNHEISER && c == (GAIA_CMD_GET_ANC_STATUS | 0x0100) {
+                if let Ok((v, c, _)) = self.exchange(GAIA_CMD_GET_ANC_STATUS, &[], exchange_timeout) {
+                    if v == VENDOR_SENNHEISER
+                        && (c == (GAIA_CMD_GET_ANC_STATUS | 0x0100)
+                            || c == (GAIA_CMD_GET_ANC_STATUS | 0x0180))
+                    {
                         cfg.headset_mac = Some(self.mac.clone());
                         cfg.cached_channel = Some(ch);
                         save_config(&cfg);
@@ -396,9 +395,15 @@ impl SennheiserHeadset {
             }
         }
 
+        // All channels failed. Clear stale cached channel so future attempts can rediscover.
+        if cfg.cached_channel.is_some() {
+            cfg.cached_channel = None;
+            save_config(&cfg);
+        }
+
         Err(io::Error::new(
             io::ErrorKind::ConnectionRefused,
-            format!("Failed to connect to Sennheiser headset ({})", self.mac),
+            format!("Failed to connect to Sennheiser headset ({}) over RFCOMM channels", self.mac),
         ))
     }
 

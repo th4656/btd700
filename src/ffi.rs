@@ -246,7 +246,7 @@ pub extern "C" fn btd_get_headset_status_json() -> *mut c_char {
         }
         mgr.last_attempt = Some(now);
         if let Some(hs) = mgr.headset.as_mut() {
-            if hs.connect(Duration::from_millis(400)).is_err() {
+            if hs.connect(Duration::from_millis(2000)).is_err() {
                 mgr.last_state.connected = false;
                 mgr.last_state.mac = mac;
                 return to_c_string(serde_json::to_string(&mgr.last_state).unwrap_or_default());
