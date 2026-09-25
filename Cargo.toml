@@ -1,0 +1,22 @@
+[package]
+name = "btd700"
+version = "0.2.0"
+edition = "2021"
+authors = ["Sennheiser Linux Project"]
+description = "Sennheiser BTD 600 / BTD 700 & Headset ANC Control in Rust with Qt6 GUI"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ureq = { version = "2.10", features = ["json"] }
+
+[build-dependencies]
+cc = { version = "1.0", features = ["parallel"] }
+pkg-config = "0.3"
+
+[[bin]]
+name = "btd700"
+path = "src/main.rs"

@@ -13,6 +13,9 @@ dist/
 env/
 venv/
 
-# Large binaries
+# Large binaries & Rust build
 *.exe
 *.bin
+target/
+*.o
+*.a

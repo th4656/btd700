@@ -7,6 +7,9 @@ BIN_DIR="${PREFIX}/bin"
 ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 DESKTOP_DIR="${PREFIX}/share/applications"
 
+echo "Building Sennheiser Dongle Control (Rust + Qt6)..."
+cargo build --release --manifest-path "${SCRIPT_DIR}/Cargo.toml"
+
 echo "Installing Sennheiser Dongle Control (btd700)..."
 
 # Install udev rule if root or sudo available
@@ -23,14 +26,13 @@ else
     echo "To allow non-root access, run: sudo cp ${SCRIPT_DIR}/99-sennheiser-btd.rules /etc/udev/rules.d/"
 fi
 
-# Install btd700 executable
+# Install btd700 binary
 mkdir -p "${BIN_DIR}"
-ln -sf "${SCRIPT_DIR}/btd700.py" "${BIN_DIR}/btd700"
-chmod +x "${BIN_DIR}/btd700"
+install -m 755 "${SCRIPT_DIR}/target/release/btd700" "${BIN_DIR}/btd700"
 
 # Install icons and desktop launcher
 mkdir -p "${ICON_DIR}" "${DESKTOP_DIR}"
-cp "${SCRIPT_DIR}/btd700/assets/app_icon.png" "${ICON_DIR}/sennheiser-btd.png" 2>/dev/null || true
+cp "${SCRIPT_DIR}/assets/app_icon.png" "${ICON_DIR}/sennheiser-btd.png" 2>/dev/null || true
 cp "${SCRIPT_DIR}/sennheiser-dongle-control.desktop" "${DESKTOP_DIR}/" 2>/dev/null || true
 
 echo "Installation complete!"
