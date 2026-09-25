@@ -234,11 +234,16 @@ pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
             };
-            dev.open()?;
-            let m = match mode.to_lowercase().as_str() {
-                "gaming" => AudioMode::Gaming,
-                "broadcast" | "auracast" => AudioMode::Broadcast,
-                _ => AudioMode::HighQuality,
+            let clean = mode.to_lowercase().replace(['-', '_', ' '], "");
+            let m = match clean.as_str() {
+                "gaming" | "1" => AudioMode::Gaming,
+                "broadcast" | "auracast" | "bcast" | "2" => AudioMode::Broadcast,
+                "onetoone" | "hq" | "highquality" | "0" => AudioMode::HighQuality,
+                other => {
+                    eprintln!("Unknown mode '{other}'. Choose: one-to-one (hq), gaming, broadcast (auracast)");
+                    dev.close();
+                    return Ok(());
+                }
             };
             if dev.set_audio_mode(m) {
                 println!("Audio mode switched to: \x1b[1;32m{}\x1b[0m", m.as_str());

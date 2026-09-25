@@ -83,7 +83,11 @@ impl BTDDevice {
         while start.elapsed() < timeout {
             if let Ok(Some(raw)) = self.hid.read_report(20) {
                 if let Some((resp_cmd, payload)) = Protocol::parse_response(&raw) {
-                    if resp_cmd == expected_cmd || (expected_cmd == 1 && resp_cmd == 1) || (expected_cmd == 21 && resp_cmd == 21) {
+                    if resp_cmd == expected_cmd
+                        || (expected_cmd == 1 && resp_cmd == 1)
+                        || (expected_cmd == 2 && (resp_cmd == 2 || resp_cmd == 1))
+                        || (expected_cmd == 21 && resp_cmd == 21)
+                    {
                         return Some((resp_cmd, payload));
                     }
                 }
@@ -205,9 +209,35 @@ impl BTDDevice {
         if !self.is_btd700 {
             return false;
         }
-        let transport = self.last_status.transport_mode_code.max(1);
+
+        // Determine current transport mode if not yet known
+        let mut transport = self.last_status.transport_mode_code;
+        if transport == 0 {
+            if let Some((_, p)) = self.send_command(HostCmd::GetAudioModeAndTransport, &[], 200) {
+                if p.len() >= 2 {
+                    transport = p[1];
+                }
+            }
+        }
+
+        // Auracast Broadcast requires LE Audio transport (2)
+        if mode == AudioMode::Broadcast {
+            transport = 2;
+        } else if transport == 0 {
+            transport = 1; // Default to BT Classic
+        }
+
         let args = [mode as u8, transport];
-        self.send_command(HostCmd::SetAudioModeAndTransport, &args, 1000).is_some()
+        let resp = self.send_command(HostCmd::SetAudioModeAndTransport, &args, 1500);
+        if resp.is_some() {
+            self.last_status.audio_mode_code = mode as u8;
+            self.last_status.audio_mode = mode.as_str().to_string();
+            self.last_status.transport_mode_code = transport;
+            self.last_status.transport_mode = TransportMode::from_u8(transport).as_str().to_string();
+            true
+        } else {
+            false
+        }
     }
 
     pub fn set_codec(&mut self, codec_bit: u8) -> bool {

@@ -106,4 +106,5 @@ private:
     QLabel *m_transVal;
     QComboBox *m_antiWindCombo;
     QLabel *m_headsetDeviceLabel;
+    qint64 m_lastModeChangeTime{0};
 };

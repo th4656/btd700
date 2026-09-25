@@ -33,6 +33,8 @@ static HEADSET_MGR: Mutex<GlobalHeadsetState> = Mutex::new(GlobalHeadsetState {
     },
 });
 
+static DONGLE_MUTEX: Mutex<()> = Mutex::new(());
+
 #[no_mangle]
 pub extern "C" fn btd_free_string(s: *mut c_char) {
     if !s.is_null() {
@@ -46,6 +48,7 @@ fn to_c_string(s: String) -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn btd_get_dongle_status_json() -> *mut c_char {
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => {
@@ -76,12 +79,14 @@ pub extern "C" fn btd_set_mode(mode_str: *const c_char) -> bool {
         return false;
     }
     let s = unsafe { CStr::from_ptr(mode_str) }.to_string_lossy().to_lowercase();
-    let mode = match s.as_str() {
-        "gaming" => AudioMode::Gaming,
-        "broadcast" | "auracast" => AudioMode::Broadcast,
+    let clean = s.replace(['-', '_', ' '], "");
+    let mode = match clean.as_str() {
+        "gaming" | "1" => AudioMode::Gaming,
+        "broadcast" | "auracast" | "bcast" | "2" => AudioMode::Broadcast,
         _ => AudioMode::HighQuality,
     };
 
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => return false,
@@ -96,6 +101,7 @@ pub extern "C" fn btd_set_mode(mode_str: *const c_char) -> bool {
 
 #[no_mangle]
 pub extern "C" fn btd_set_codec(bit: u8) -> bool {
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => return false,
@@ -115,6 +121,7 @@ pub extern "C" fn btd_set_broadcast(
     quality: i32,
     key: *const c_char,
 ) -> bool {
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => return false,
@@ -154,6 +161,7 @@ pub extern "C" fn btd_set_broadcast(
 
 #[no_mangle]
 pub extern "C" fn btd_pair() -> bool {
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => return false,
@@ -168,6 +176,7 @@ pub extern "C" fn btd_pair() -> bool {
 
 #[no_mangle]
 pub extern "C" fn btd_reset() -> bool {
+    let _guard = DONGLE_MUTEX.lock();
     let mut dev = match get_first_dongle() {
         Some(d) => d,
         None => return false,

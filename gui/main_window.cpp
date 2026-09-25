@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QThreadPool>
+#include <QDateTime>
 
 extern "C" {
     char* btd_get_dongle_status_json();
@@ -389,10 +390,12 @@ void MainWindow::onDongleStatusReceived(const QString &rawDongle) {
         m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4);");
         m_modelLabel->setText(obj["model"].toString("Sennheiser BTD 700") + " • " + obj["serial"].toString(""));
 
-        QString mode = obj["audio_mode"].toString().toLower();
-        m_btnModeHQ->setChecked(mode.contains("high") || mode.contains("one"));
-        m_btnModeGaming->setChecked(mode.contains("gaming"));
-        m_btnModeBroadcast->setChecked(mode.contains("broadcast"));
+        if (QDateTime::currentMSecsSinceEpoch() - m_lastModeChangeTime > 2000) {
+            QString mode = obj["audio_mode"].toString().toLower();
+            m_btnModeHQ->setChecked(mode.contains("high") || mode.contains("one"));
+            m_btnModeGaming->setChecked(mode.contains("gaming"));
+            m_btnModeBroadcast->setChecked(mode.contains("broadcast"));
+        }
 
         m_activeCodecLabel->setText(obj["codec_in_use"].toString("-"));
         m_sampleRateLabel->setText(obj["frequency"].toString("-"));
@@ -501,6 +504,7 @@ void MainWindow::onHeadsetStatusReceived(const QString &rawHeadset) {
 }
 
 void MainWindow::onModeClicked(const QString &mode) {
+    m_lastModeChangeTime = QDateTime::currentMSecsSinceEpoch();
     m_btnModeHQ->setChecked(mode == "one-to-one");
     m_btnModeGaming->setChecked(mode == "gaming");
     m_btnModeBroadcast->setChecked(mode == "broadcast");
