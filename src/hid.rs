@@ -158,10 +158,24 @@ impl HidrawDevice {
     }
 
     pub fn write_report(&mut self, data: &[u8]) -> io::Result<usize> {
-        let f = self.file.as_mut().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotConnected, "Device is not open")
-        })?;
-        f.write(data)
+        let res = {
+            let f = self.file.as_mut().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotConnected, "Device is not open")
+            })?;
+            f.write(data)
+        };
+
+        match res {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                // Fallback to HIDIOCSFEATURE ioctl if standard write fails on some kernels/interfaces
+                if self.set_feature(data).is_ok() {
+                    Ok(data.len())
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     pub fn read_report(&mut self, timeout_ms: u64) -> io::Result<Option<Vec<u8>>> {

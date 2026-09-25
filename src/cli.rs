@@ -234,6 +234,7 @@ pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
             };
+            dev.open()?;
             let clean = mode.to_lowercase().replace(['-', '_', ' '], "");
             let m = match clean.as_str() {
                 "gaming" | "1" => AudioMode::Gaming,
@@ -245,10 +246,13 @@ pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
             };
-            if dev.set_audio_mode(m) {
-                println!("Audio mode switched to: \x1b[1;32m{}\x1b[0m", m.as_str());
-            } else {
-                eprintln!("Failed to set audio mode.");
+            match dev.set_audio_mode(m) {
+                Ok(()) => {
+                    println!("Audio mode switched to: \x1b[1;32m{}\x1b[0m", m.as_str());
+                }
+                Err(err) => {
+                    eprintln!("Failed to set audio mode: {err}");
+                }
             }
             dev.close();
         }

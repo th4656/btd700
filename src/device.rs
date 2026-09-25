@@ -205,15 +205,15 @@ impl BTDDevice {
         st
     }
 
-    pub fn set_audio_mode(&mut self, mode: AudioMode) -> bool {
+    pub fn set_audio_mode(&mut self, mode: AudioMode) -> Result<(), String> {
         if !self.is_btd700 {
-            return false;
+            return Err("Audio mode switching is only supported on Sennheiser BTD 700 (BTD 600 does not support LE Audio/Gaming/Auracast modes)".to_string());
         }
 
         // Determine current transport mode if not yet known
         let mut transport = self.last_status.transport_mode_code;
         if transport == 0 {
-            if let Some((_, p)) = self.send_command(HostCmd::GetAudioModeAndTransport, &[], 200) {
+            if let Some((_, p)) = self.send_command(HostCmd::GetAudioModeAndTransport, &[], 500) {
                 if p.len() >= 2 {
                     transport = p[1];
                 }
@@ -228,15 +228,15 @@ impl BTDDevice {
         }
 
         let args = [mode as u8, transport];
-        let resp = self.send_command(HostCmd::SetAudioModeAndTransport, &args, 1500);
+        let resp = self.send_command(HostCmd::SetAudioModeAndTransport, &args, 2500);
         if resp.is_some() {
             self.last_status.audio_mode_code = mode as u8;
             self.last_status.audio_mode = mode.as_str().to_string();
             self.last_status.transport_mode_code = transport;
             self.last_status.transport_mode = TransportMode::from_u8(transport).as_str().to_string();
-            true
+            Ok(())
         } else {
-            false
+            Err("Dongle timed out or rejected SetAudioModeAndTransport command".to_string())
         }
     }
 
@@ -308,5 +308,33 @@ pub fn get_first_dongle() -> Option<BTDDevice> {
     if devs.is_empty() {
         return None;
     }
+    // Prefer the interface with report ID 52 (BTD700 vendor command interface)
+    if let Some(ctrl) = devs.iter().find(|d| d.report_ids.contains(&BTD700_REPORT_ID)) {
+        return Some(BTDDevice::new(ctrl.clone()));
+    }
     Some(BTDDevice::new(devs[0].clone()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_audio_mode_btd600_rejected() {
+        let info = DeviceInfo {
+            dev_path: "/dev/hidraw0".to_string(),
+            sys_path: "/sys/class/hidraw/hidraw0".to_string(),
+            vid: VID_SENNHEISER,
+            pid: PID_BTD600,
+            model_name: "Sennheiser BTD 600".to_string(),
+            product_name: "BTD 600".to_string(),
+            serial: "12345".to_string(),
+            report_ids: vec![1, 2, 3],
+        };
+        let mut dev = BTDDevice::new(info);
+        let res = dev.set_audio_mode(AudioMode::Gaming);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("BTD 600"));
+    }
+}
+

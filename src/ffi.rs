@@ -94,7 +94,7 @@ pub extern "C" fn btd_set_mode(mode_str: *const c_char) -> bool {
     if dev.open().is_err() {
         return false;
     }
-    let res = dev.set_audio_mode(mode);
+    let res = dev.set_audio_mode(mode).is_ok();
     dev.close();
     res
 }
