@@ -148,7 +148,7 @@ impl GaiaProtocol {
         let mut offset = 0;
 
         while buffer.len().saturating_sub(offset) >= 8 {
-            if &buffer[offset..offset + 2] != GAIA_MAGIC {
+            if buffer[offset..offset + 2] != GAIA_MAGIC {
                 if let Some(pos) = buffer[offset + 1..]
                     .windows(2)
                     .position(|w| w == GAIA_MAGIC)
@@ -512,3 +512,86 @@ impl SennheiserHeadset {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_mac_to_bdaddr() {
+        let mac = "00:11:22:33:44:55";
+        let addr = parse_mac_to_bdaddr(mac);
+        assert!(addr.is_some());
+        // Little endian reverse order: 55:44:33:22:11:00
+        assert_eq!(addr.unwrap(), [0x55, 0x44, 0x33, 0x22, 0x11, 0x00]);
+
+        assert_eq!(parse_mac_to_bdaddr("invalid"), None);
+        assert_eq!(parse_mac_to_bdaddr("00:11:22:33:44"), None);
+        assert_eq!(parse_mac_to_bdaddr("00:11:22:33:44:55:66"), None);
+        assert_eq!(parse_mac_to_bdaddr("00:11:22:33:44:ZZ"), None);
+    }
+
+    #[test]
+    fn test_gaia_build() {
+        let cmd = GAIA_CMD_SET_ANC_STATUS;
+        let payload = [0x01];
+        let pkt = GaiaProtocol::build(cmd, &payload);
+
+        assert_eq!(&pkt[0..2], &GAIA_MAGIC);
+        assert_eq!(u16::from_be_bytes([pkt[2], pkt[3]]), 1); // length
+        assert_eq!(u16::from_be_bytes([pkt[4], pkt[5]]), VENDOR_SENNHEISER);
+        assert_eq!(u16::from_be_bytes([pkt[6], pkt[7]]), cmd);
+        assert_eq!(&pkt[8..], &[0x01]);
+    }
+
+    #[test]
+    fn test_gaia_parse_many_single() {
+        let pkt = GaiaProtocol::build(GAIA_CMD_GET_ANC_STATUS, &[0x01]);
+        let (packets, consumed) = GaiaProtocol::parse_many(&pkt);
+        assert_eq!(packets.len(), 1);
+        assert_eq!(consumed, pkt.len());
+        assert_eq!(packets[0].0, VENDOR_SENNHEISER);
+        assert_eq!(packets[0].1, GAIA_CMD_GET_ANC_STATUS);
+        assert_eq!(packets[0].2, vec![0x01]);
+    }
+
+    #[test]
+    fn test_gaia_parse_many_multiple() {
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice(&GaiaProtocol::build(0x1001, &[1, 2]));
+        buffer.extend_from_slice(&GaiaProtocol::build(0x1002, &[3, 4, 5]));
+
+        let (packets, consumed) = GaiaProtocol::parse_many(&buffer);
+        assert_eq!(packets.len(), 2);
+        assert_eq!(consumed, buffer.len());
+        assert_eq!(packets[0].1, 0x1001);
+        assert_eq!(packets[0].2, vec![1, 2]);
+        assert_eq!(packets[1].1, 0x1002);
+        assert_eq!(packets[1].2, vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn test_gaia_parse_many_with_garbage_prefix() {
+        let mut buffer = vec![0x00, 0xAA, 0xBB];
+        buffer.extend_from_slice(&GaiaProtocol::build(0x1A04, &[0x00]));
+
+        let (packets, consumed) = GaiaProtocol::parse_many(&buffer);
+        assert_eq!(packets.len(), 1);
+        assert_eq!(consumed, buffer.len());
+        assert_eq!(packets[0].1, 0x1A04);
+        assert_eq!(packets[0].2, vec![0x00]);
+    }
+
+    #[test]
+    fn test_headset_config_serde() {
+        let cfg = HeadsetConfig {
+            headset_mac: Some("AA:BB:CC:DD:EE:FF".to_string()),
+            cached_channel: Some(2),
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let loaded: HeadsetConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.headset_mac.as_deref(), Some("AA:BB:CC:DD:EE:FF"));
+        assert_eq!(loaded.cached_channel, Some(2));
+    }
+}
+

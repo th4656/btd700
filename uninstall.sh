@@ -11,6 +11,7 @@ echo "Uninstalling Sennheiser Dongle Control (btd700)..."
 rm -f "${BIN_DIR}/btd700"
 rm -f "${ICON_DIR}/sennheiser-btd.png"
 rm -f "${DESKTOP_DIR}/sennheiser-dongle-control.desktop"
+rm -f "${PREFIX}/share/man/man1/btd700.1"
 
 if [ "$EUID" -eq 0 ]; then
     rm -f /etc/udev/rules.d/99-sennheiser-btd.rules

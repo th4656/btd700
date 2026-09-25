@@ -1,0 +1,101 @@
+.TH BTD700 1 "September 2026" "btd700 0.2.0" "User Commands"
+.SH NAME
+btd700 \- Linux control utility and Qt6 GUI for Sennheiser BTD 600 / BTD 700 adapters & HDB 630 ANC
+.SH SYNOPSIS
+.B btd700
+[\fICOMMAND\fR] [\fIOPTIONS\fR]
+.br
+.B btd700 gui
+.SH DESCRIPTION
+\fBbtd700\fR provides Linux users with full control over Sennheiser BTD 600 and BTD 700 USB Bluetooth audio adapters, as well as direct Active Noise Cancellation (ANC) and DSP control for paired Sennheiser headphones (such as HDB 630, Momentum 4, and Accentum).
+.PP
+It includes both a fast command line interface and a native Qt6 graphical desktop interface.
+.SH COMMANDS
+.TP
+\fBgui\fR
+Launch the native Qt6 graphical user interface.
+.TP
+\fBlist\fR
+List all detected Sennheiser BTD adapters connected via USB HID.
+.TP
+\fBstatus\fR
+Query detailed connection status, active audio link mode, sample rate, bit resolution, active codec, and Auracast configuration.
+.TP
+\fBmode\fR [\fImode\fR]
+View or change the audio link mode:
+.RS
+.IP \(bu 2
+\fBone-to-one\fR (or \fBhq\fR): High Quality stereo link up to 24-bit/96kHz.
+.IP \(bu 2
+\fBgaming\fR: Low latency mode for gaming and bi-directional communications.
+.IP \(bu 2
+\fBbroadcast\fR (or \fBauracast\fR): LE Audio Auracast broadcast.
+.RE
+.TP
+\fBcodec\fR [\fIcodec\fR]
+View supported codecs or switch preferred active codec (\fBsbc\fR, \fBaptx\fR, \fBaptx-adaptive\fR, \fBaptx-lossless\fR, \fBaptx-lite\fR, \fBlc3\fR).
+.TP
+\fBbroadcast\fR [\fIoptions\fR]
+Configure Auracast broadcast:
+.RS
+.TP
+\fB\-\-enable\fR / \fB\-\-disable\fR
+Turn Auracast broadcast on or off.
+.TP
+\fB\-\-name\fR \fINAME\fR
+Set the broadcast stream name.
+.TP
+\fB\-\-quality\fR \fIQUALITY\fR
+Set broadcast quality (\fBsq16\fR, \fBsq24\fR, \fBhq\fR).
+.TP
+\fB\-\-key\fR \fIPASSWORD\fR
+Set Auracast encryption PIN / password.
+.RE
+.TP
+\fBheadsets\fR
+Scan and list paired Sennheiser headphones using bluetoothctl.
+.TP
+\fBheadset status\fR [\fB\-\-mac\fR \fIMAC\fR]
+Query current headphone state (ANC status, strength, transparency, adaptive mode, wind mode, bass boost).
+.TP
+\fBanc\fR [\fBon\fR|\fBoff\fR|\fBtoggle\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Toggle or set Active Noise Cancellation.
+.TP
+\fBanc-strength\fR [\fI0-100\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Set or view ANC strength percentage (0 to 100%).
+.TP
+\fBadaptive-anc\fR [\fBon\fR|\fBoff\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Set or view Adaptive ANC mode.
+.TP
+\fBanti-wind\fR [\fBoff\fR|\fBauto\fR|\fBmax\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Set or view Anti-Wind noise reduction mode.
+.TP
+\fBtransparency\fR [\fI0-100\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Set or view transparency level percentage.
+.TP
+\fBbass-boost\fR [\fBon\fR|\fBoff\fR] [\fB\-\-mac\fR \fIMAC\fR]
+Enable or disable hardware bass boost equalizer.
+.TP
+\fBpair\fR
+Put the BTD adapter into Bluetooth pairing mode.
+.TP
+\fBreset\fR
+Perform a factory reset on the adapter.
+.TP
+\fBdfu check\fR
+Check the Sennheiser Cloud API for available firmware updates.
+.TP
+\fBdfu download\fR [\fB\-\-out\fR \fIPATH\fR]
+Download latest official firmware file from Sennheiser servers.
+.SH FILES
+.TP
+\fI/etc/udev/rules.d/99-sennheiser-btd.rules\fR
+Udev rules granting non-root user access to Sennheiser USB HID devices.
+.TP
+\fI~/.config/btd700/config.json\fR
+User configuration file caching selected headphone MAC address and RFCOMM channel.
+.SH AUTHOR
+Written for Linux by the community.
+.SH SEE ALSO
+.BR bluetoothctl (1),
+.BR udev (7)

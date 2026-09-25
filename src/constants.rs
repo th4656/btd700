@@ -209,3 +209,81 @@ pub fn dongle_state_str(st: u8) -> &'static str {
         _ => "Unknown State",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audio_mode_conversion() {
+        assert_eq!(AudioMode::from_u8(0), AudioMode::HighQuality);
+        assert_eq!(AudioMode::from_u8(1), AudioMode::Gaming);
+        assert_eq!(AudioMode::from_u8(2), AudioMode::Broadcast);
+        assert_eq!(AudioMode::from_u8(99), AudioMode::HighQuality);
+
+        assert_eq!(AudioMode::HighQuality.as_str(), "High Quality (One-to-One)");
+        assert_eq!(AudioMode::Gaming.as_str(), "Gaming Mode");
+        assert_eq!(AudioMode::Broadcast.as_str(), "Auracast Broadcast");
+    }
+
+    #[test]
+    fn test_transport_mode_conversion() {
+        assert_eq!(TransportMode::from_u8(0), TransportMode::None);
+        assert_eq!(TransportMode::from_u8(1), TransportMode::Bredr);
+        assert_eq!(TransportMode::from_u8(2), TransportMode::LeAudio);
+        assert_eq!(TransportMode::from_u8(255), TransportMode::None);
+
+        assert_eq!(TransportMode::Bredr.as_str(), "Classic (BR/EDR)");
+        assert_eq!(TransportMode::LeAudio.as_str(), "LE Audio");
+        assert_eq!(TransportMode::None.as_str(), "None / Disconnected");
+    }
+
+    #[test]
+    fn test_codec_bit_decoding() {
+        assert_eq!(CodecBit::from_bit(0), Some(CodecBit::Sbc));
+        assert_eq!(CodecBit::from_bit(1), Some(CodecBit::Aptx));
+        assert_eq!(CodecBit::from_bit(2), Some(CodecBit::AptxAdaptive));
+        assert_eq!(CodecBit::from_bit(3), Some(CodecBit::AptxLossless));
+        assert_eq!(CodecBit::from_bit(4), Some(CodecBit::AptxLite));
+        assert_eq!(CodecBit::from_bit(5), Some(CodecBit::Lc3));
+        assert_eq!(CodecBit::from_bit(6), None);
+
+        assert_eq!(CodecBit::from_name("sbc"), Some(CodecBit::Sbc));
+        assert_eq!(CodecBit::from_name("aptx"), Some(CodecBit::Aptx));
+        assert_eq!(CodecBit::from_name("aptx-adaptive"), Some(CodecBit::AptxAdaptive));
+        assert_eq!(CodecBit::from_name("APTX_LOSSLESS"), Some(CodecBit::AptxLossless));
+        assert_eq!(CodecBit::from_name("lc3"), Some(CodecBit::Lc3));
+        assert_eq!(CodecBit::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn test_broadcast_quality() {
+        assert_eq!(BroadcastQuality::from_u8(0), BroadcastQuality::Sq16);
+        assert_eq!(BroadcastQuality::from_u8(1), BroadcastQuality::Sq24);
+        assert_eq!(BroadcastQuality::from_u8(2), BroadcastQuality::Hq);
+        assert_eq!(BroadcastQuality::from_u8(10), BroadcastQuality::Hq);
+
+        assert_eq!(BroadcastQuality::Sq16.as_str(), "Standard Quality (16 kHz)");
+        assert_eq!(BroadcastQuality::Sq24.as_str(), "Standard Quality (24 kHz)");
+        assert_eq!(BroadcastQuality::Hq.as_str(), "High Quality (48 kHz)");
+    }
+
+    #[test]
+    fn test_string_helpers() {
+        assert_eq!(audio_resolution_str(1), "16-bit");
+        assert_eq!(audio_resolution_str(2), "24-bit");
+        assert_eq!(audio_resolution_str(3), "32-bit");
+        assert_eq!(audio_resolution_str(99), "Unknown bit depth");
+
+        assert_eq!(audio_frequency_str(1), "44.1 kHz");
+        assert_eq!(audio_frequency_str(2), "48.0 kHz");
+        assert_eq!(audio_frequency_str(3), "96.0 kHz");
+        assert_eq!(audio_frequency_str(99), "Unknown sample rate");
+
+        assert_eq!(dongle_state_str(0), "Idle / Standby");
+        assert_eq!(dongle_state_str(3), "Connected");
+        assert_eq!(dongle_state_str(4), "Streaming Audio");
+        assert_eq!(dongle_state_str(99), "Unknown State");
+    }
+}
+

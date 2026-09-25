@@ -72,14 +72,26 @@ On Fedora:
 sudo dnf install cargo rust qt6-qtbase-devel pkgconfig gcc-c++
 ```
 
+### Arch Linux (PKGBUILD / makepkg)
+A complete `PKGBUILD` and `.SRCINFO` are included in the repository. To build and install via `makepkg`:
+```bash
+makepkg -si
+```
+
 ### Build from Source
 ```bash
 cargo build --release
 ```
 The compiled binary will be at `target/release/btd700`.
 
-### System-Wide Installation
-To install `btd700` system-wide into `/usr/local/bin`, install udev rules, and register the desktop application menu launcher:
+### Running Unit & Integration Tests
+To run the automated test suite (constants, wire protocol framing, DFU image parser, Qualcomm GAIA V3 frame codec, CLI parsing):
+```bash
+cargo test
+```
+
+### System-Wide Installation (via script)
+To install `btd700` system-wide into `/usr/local/bin`, install udev rules, man page, and register the desktop application menu launcher:
 
 ```bash
 sudo ./install.sh
@@ -91,6 +103,7 @@ sudo ./uninstall.sh
 ```
 
 ---
+
 
 ## Quick Start
 
@@ -266,3 +279,12 @@ btd700 dfu update --file /path/to/firmware.bin
   - Anti-Wind Reduction: Commands `0x1A08` (Set) and `0x1A09` (Get)
   - Transparency Mode: Commands `0x1A02` (Set) and `0x1A03` (Get)
   - Bass Boost EQ: Commands `0x1008` (Set) and `0x1009` (Get)
+
+---
+
+## Documentation
+
+- [Architecture Overview](docs/ARCHITECTURE.md): Technical breakdown of the Rust systems core, Linux HID driver, RFCOMM socket layer, and Qt6 C++ FFI integration.
+- [Wire Protocol Specification](docs/PROTOCOL.md): Low-level frame layouts for HID Report ID 52 and Qualcomm GAIA V3.
+- [Manual Page](docs/btd700.1): Command line reference and options (`man btd700`).
+

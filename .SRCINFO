@@ -1,0 +1,23 @@
+pkgbase = btd700
+	pkgdesc = Linux control utility and native Qt6 GUI for Sennheiser BTD 600/700 and HDB 630 ANC
+	pkgver = 0.2.0
+	pkgrel = 1
+	url = https://github.com/th4656/btd700
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = cargo
+	makedepends = rust
+	makedepends = qt6-base
+	makedepends = pkgconf
+	makedepends = gcc
+	makedepends = git
+	depends = qt6-base
+	depends = bluez
+	depends = glibc
+	depends = gcc-libs
+	optdepends = bluez-utils: automatic headphone scanning via bluetoothctl
+	source = btd700::git+https://github.com/th4656/btd700.git#branch=main
+	sha256sums = SKIP
+
+pkgname = btd700

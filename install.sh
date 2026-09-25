@@ -35,5 +35,10 @@ mkdir -p "${ICON_DIR}" "${DESKTOP_DIR}"
 cp "${SCRIPT_DIR}/assets/app_icon.png" "${ICON_DIR}/sennheiser-btd.png" 2>/dev/null || true
 cp "${SCRIPT_DIR}/sennheiser-dongle-control.desktop" "${DESKTOP_DIR}/" 2>/dev/null || true
 
+# Install manual page
+MAN_DIR="${PREFIX}/share/man/man1"
+mkdir -p "${MAN_DIR}"
+cp "${SCRIPT_DIR}/docs/btd700.1" "${MAN_DIR}/" 2>/dev/null || true
+
 echo "Installation complete!"
 echo "You can now run 'btd700' from your terminal or launch 'Sennheiser Dongle Control' from your app menu."

@@ -52,3 +52,55 @@ impl Protocol {
         Some((cmd_id, payload))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_host_cmd_no_args() {
+        let pkt = Protocol::build_host_cmd(HostCmd::GetDongleState, &[]);
+        assert_eq!(pkt, vec![52, 0xFE, HostCmd::GetDongleState as u8, 0]);
+    }
+
+    #[test]
+    fn test_build_host_cmd_with_args() {
+        let pkt = Protocol::build_host_cmd(HostCmd::SetAudioModeAndTransport, &[1, 2]);
+        assert_eq!(pkt, vec![52, 0xFE, 2, 2, 1, 2]);
+    }
+
+    #[test]
+    fn test_parse_response_with_report_id() {
+        // [52, 0xFD, cmd_id=6, len=2, 0xAA, 0xBB]
+        let data = [52, 0xFD, 6, 2, 0xAA, 0xBB, 0x00, 0x00];
+        let res = Protocol::parse_response(&data);
+        assert!(res.is_some());
+        let (cmd, payload) = res.unwrap();
+        assert_eq!(cmd, 6);
+        assert_eq!(payload, vec![0xAA, 0xBB]);
+    }
+
+    #[test]
+    fn test_parse_response_without_report_id() {
+        // [0xFD, cmd_id=1, len=1, 0x01]
+        let data = [0xFD, 1, 1, 0x01];
+        let res = Protocol::parse_response(&data);
+        assert!(res.is_some());
+        let (cmd, payload) = res.unwrap();
+        assert_eq!(cmd, 1);
+        assert_eq!(payload, vec![0x01]);
+    }
+
+    #[test]
+    fn test_parse_response_invalid_magic() {
+        let data = [52, 0xAA, 1, 1, 0x01];
+        assert_eq!(Protocol::parse_response(&data), None);
+    }
+
+    #[test]
+    fn test_parse_response_too_short() {
+        let data = [52, 0xFD];
+        assert_eq!(Protocol::parse_response(&data), None);
+    }
+}
+
