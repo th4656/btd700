@@ -12,6 +12,11 @@
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QThread>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+#include <QActionGroup>
+#include <QCloseEvent>
 #include <atomic>
 
 class StatusWorker : public QThread {
@@ -46,6 +51,12 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
+    static QIcon generateTrayIcon(const QString &mode, bool connected, bool ancActive);
+    static QPixmap renderModePixmap(int size, const QString &mode, bool connected, bool ancActive);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void onDongleStatusReceived(const QString &json);
     void onHeadsetStatusReceived(const QString &json);
@@ -67,44 +78,68 @@ private slots:
 
 private:
     void setupUi();
+    void setupTrayIcon();
     void applyDarkTheme();
+    void updateTrayIcon(const QString &mode, bool connected, bool ancActive,
+                        const QString &model, const QString &codec, const QString &headsetName);
 
-    StatusWorker *m_worker;
+    StatusWorker *m_worker{nullptr};
+
+    // System Tray
+    QSystemTrayIcon *m_trayIcon{nullptr};
+    QMenu *m_trayMenu{nullptr};
+    QAction *m_trayStatusAction{nullptr};
+    QActionGroup *m_trayModeGroup{nullptr};
+    QAction *m_trayActionHQ{nullptr};
+    QAction *m_trayActionGaming{nullptr};
+    QAction *m_trayActionBroadcast{nullptr};
+    QAction *m_trayActionAnc{nullptr};
+    QAction *m_trayActionToggleWindow{nullptr};
+    QAction *m_trayActionQuit{nullptr};
+    bool m_forceQuit{false};
+
+    // Cached status for tray updates
+    bool m_lastConnected{false};
+    QString m_lastAudioMode{"one-to-one"};
+    QString m_lastModel{"Sennheiser BTD 700"};
+    QString m_lastCodec{"-"};
+    QString m_lastHeadsetName{""};
+    bool m_lastAncActive{false};
 
     // Dongle Status Widgets
-    QLabel *m_statusBadge;
-    QLabel *m_modelLabel;
+    QLabel *m_statusBadge{nullptr};
+    QLabel *m_modelLabel{nullptr};
 
     // Mode Buttons / Cards
-    QPushButton *m_btnModeHQ;
-    QPushButton *m_btnModeGaming;
-    QPushButton *m_btnModeBroadcast;
+    QPushButton *m_btnModeHQ{nullptr};
+    QPushButton *m_btnModeGaming{nullptr};
+    QPushButton *m_btnModeBroadcast{nullptr};
 
     // Stream Details
-    QLabel *m_activeCodecLabel;
-    QLabel *m_sampleRateLabel;
-    QLabel *m_bitDepthLabel;
-    QLabel *m_transportLabel;
+    QLabel *m_activeCodecLabel{nullptr};
+    QLabel *m_sampleRateLabel{nullptr};
+    QLabel *m_bitDepthLabel{nullptr};
+    QLabel *m_transportLabel{nullptr};
 
     // Codec Badges
-    QHBoxLayout *m_codecsLayout;
+    QHBoxLayout *m_codecsLayout{nullptr};
     QList<QPushButton*> m_codecButtons;
     QString m_lastCodecSignature;
 
     // Auracast Inputs
-    QLineEdit *m_bcastNameEdit;
-    QComboBox *m_bcastQualityCombo;
-    QLineEdit *m_bcastKeyEdit;
+    QLineEdit *m_bcastNameEdit{nullptr};
+    QComboBox *m_bcastQualityCombo{nullptr};
+    QLineEdit *m_bcastKeyEdit{nullptr};
 
     // Headphone Widgets
-    QPushButton *m_btnAnc;
-    QPushButton *m_btnAdaptive;
-    QPushButton *m_btnBass;
-    QSlider *m_ancStrengthSlider;
-    QLabel *m_ancStrengthVal;
-    QSlider *m_transSlider;
-    QLabel *m_transVal;
-    QComboBox *m_antiWindCombo;
-    QLabel *m_headsetDeviceLabel;
+    QPushButton *m_btnAnc{nullptr};
+    QPushButton *m_btnAdaptive{nullptr};
+    QPushButton *m_btnBass{nullptr};
+    QSlider *m_ancStrengthSlider{nullptr};
+    QLabel *m_ancStrengthVal{nullptr};
+    QSlider *m_transSlider{nullptr};
+    QLabel *m_transVal{nullptr};
+    QComboBox *m_antiWindCombo{nullptr};
+    QLabel *m_headsetDeviceLabel{nullptr};
     qint64 m_lastModeChangeTime{0};
 };

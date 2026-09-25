@@ -20,6 +20,15 @@ Provides both a fast **Command Line Interface (CLI)** and a sleek, native **Qt6 
   - Auracast™ configuration panel (Name, Audio Quality, Password encryption).
   - Dedicated Headphone Controls card for HDB 630 / Momentum 4.
   - Background live polling with Qt timers.
+- **System Tray Support & Dynamic Mode Indicator**:
+  - Live system tray icon reflecting the dongle's current audio link mode at a glance:
+    - 🎧 Blue **HQ** badge for High Quality / One-to-One mode
+    - 🎮 Green **GAME** badge for Gaming mode
+    - 📡 Purple **CAST** badge with radio arcs for Auracast Broadcast mode
+    - ✕ Red badge when disconnected
+    - Glowing cyan indicator dot when Headphone ANC is active
+  - Context menu with one-click mode switching, ANC toggle, and show/hide window.
+  - Minimizes to tray on window close (`btd700 gui --tray` for autostart).
 - **Audio Link Modes**:
   - 🎧 **One-to-One**: High quality stereo audio up to 24-bit / 96kHz.
   - 🎮 **Gaming Mode**: Low-latency mode for gaming and voice communication.

@@ -9,6 +9,12 @@
 #include <QInputDialog>
 #include <QThreadPool>
 #include <QDateTime>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QIcon>
+#include <QFont>
+#include <QColor>
 
 extern "C" {
     char* btd_get_dongle_status_json();
@@ -62,6 +68,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     setupUi();
     applyDarkTheme();
+    setupTrayIcon();
 
     m_worker = new StatusWorker(this);
     connect(m_worker, &StatusWorker::dongleStatusReceived, this, &MainWindow::onDongleStatusReceived);
@@ -442,10 +449,16 @@ void MainWindow::onDongleStatusReceived(const QString &rawDongle) {
         if (!m_bcastNameEdit->hasFocus()) {
             m_bcastNameEdit->setText(obj["broadcast_name"].toString());
         }
+
+        QString mode = obj["audio_mode"].toString("one-to-one");
+        QString model = obj["model"].toString("Sennheiser BTD 700");
+        QString codec = obj["codec_in_use"].toString("-");
+        updateTrayIcon(mode, true, m_lastAncActive, model, codec, m_lastHeadsetName);
     } else {
         m_statusBadge->setText("Dongle Missing");
         m_statusBadge->setStyleSheet("padding: 6px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);");
         m_modelLabel->setText("Please plug in your Sennheiser BTD adapter");
+        updateTrayIcon("one-to-one", false, false, "BTD 700", "-", "");
     }
 }
 
@@ -459,6 +472,9 @@ void MainWindow::onHeadsetStatusReceived(const QString &rawHeadset) {
 
     if (connected || !mac.isEmpty()) {
         bool anc = obj["anc_enabled"].toBool();
+        QString devName = obj["device_name"].toString(obj["name"].toString(mac));
+        updateTrayIcon(m_lastAudioMode, m_lastConnected, anc, m_lastModel, m_lastCodec, devName);
+
         m_btnAnc->setText(anc ? "ANC: ON" : "ANC: OFF");
         m_btnAnc->setStyleSheet(anc ? "background: #009fe3; color: white;" : "");
 
@@ -500,6 +516,7 @@ void MainWindow::onHeadsetStatusReceived(const QString &rawHeadset) {
         m_btnAnc->setText("ANC: Disconnected");
         m_btnAnc->setStyleSheet("");
         m_headsetDeviceLabel->setText("Pair HDB 630 via Bluetooth settings");
+        updateTrayIcon(m_lastAudioMode, m_lastConnected, false, m_lastModel, m_lastCodec, "");
     }
 }
 
@@ -508,6 +525,8 @@ void MainWindow::onModeClicked(const QString &mode) {
     m_btnModeHQ->setChecked(mode == "one-to-one");
     m_btnModeGaming->setChecked(mode == "gaming");
     m_btnModeBroadcast->setChecked(mode == "broadcast");
+
+    updateTrayIcon(mode, m_lastConnected, m_lastAncActive, m_lastModel, m_lastCodec, m_lastHeadsetName);
 
     QThreadPool::globalInstance()->start([mode]() {
         btd_set_mode(mode.toUtf8().constData());
@@ -529,6 +548,8 @@ void MainWindow::onToggleAnc() {
     bool newOn = !currentOn;
     m_btnAnc->setText(newOn ? "ANC: ON" : "ANC: OFF");
     m_btnAnc->setStyleSheet(newOn ? "background: #009fe3; color: white;" : "");
+
+    updateTrayIcon(m_lastAudioMode, m_lastConnected, newOn, m_lastModel, m_lastCodec, m_lastHeadsetName);
 
     QThreadPool::globalInstance()->start([]() {
         btd_toggle_anc();
@@ -668,3 +689,325 @@ void MainWindow::onScanHeadsets() {
         });
     });
 }
+
+void MainWindow::setupTrayIcon() {
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+        return;
+    }
+
+    m_trayMenu = new QMenu(this);
+    m_trayMenu->setStyleSheet(
+        "QMenu { background-color: #1e222b; color: #f1f5f9; border: 1px solid #333a47; border-radius: 8px; padding: 6px; font-family: system-ui, sans-serif; }"
+        "QMenu::item { padding: 6px 24px 6px 14px; border-radius: 4px; font-size: 13px; }"
+        "QMenu::item:selected { background-color: #0284c7; color: #ffffff; }"
+        "QMenu::item:disabled { color: #64748b; font-weight: bold; padding: 6px 14px; }"
+        "QMenu::separator { height: 1px; background: #333a47; margin: 4px 6px; }"
+    );
+
+    m_trayStatusAction = m_trayMenu->addAction("Sennheiser BTD 700");
+    m_trayStatusAction->setEnabled(false);
+
+    m_trayMenu->addSeparator();
+
+    // Mode actions group
+    m_trayModeGroup = new QActionGroup(this);
+    m_trayModeGroup->setExclusive(true);
+
+    m_trayActionHQ = m_trayMenu->addAction("High Quality (One-to-One)");
+    m_trayActionHQ->setCheckable(true);
+    m_trayActionHQ->setChecked(true);
+    m_trayModeGroup->addAction(m_trayActionHQ);
+    connect(m_trayActionHQ, &QAction::triggered, this, [this]() {
+        onModeClicked("one-to-one");
+    });
+
+    m_trayActionGaming = m_trayMenu->addAction("Gaming Mode");
+    m_trayActionGaming->setCheckable(true);
+    m_trayModeGroup->addAction(m_trayActionGaming);
+    connect(m_trayActionGaming, &QAction::triggered, this, [this]() {
+        onModeClicked("gaming");
+    });
+
+    m_trayActionBroadcast = m_trayMenu->addAction("Auracast Broadcast");
+    m_trayActionBroadcast->setCheckable(true);
+    m_trayModeGroup->addAction(m_trayActionBroadcast);
+    connect(m_trayActionBroadcast, &QAction::triggered, this, [this]() {
+        onModeClicked("broadcast");
+    });
+
+    m_trayMenu->addSeparator();
+
+    // Headset quick control
+    m_trayActionAnc = m_trayMenu->addAction("Active Noise Cancellation (ANC)");
+    m_trayActionAnc->setCheckable(true);
+    connect(m_trayActionAnc, &QAction::triggered, this, &MainWindow::onToggleAnc);
+
+    m_trayMenu->addSeparator();
+
+    m_trayActionToggleWindow = m_trayMenu->addAction("Hide Control Panel");
+    connect(m_trayActionToggleWindow, &QAction::triggered, this, [this]() {
+        if (isVisible() && !isMinimized()) {
+            hide();
+        } else {
+            showNormal();
+            raise();
+            activateWindow();
+        }
+    });
+
+    m_trayActionQuit = m_trayMenu->addAction("Quit");
+    connect(m_trayActionQuit, &QAction::triggered, this, [this]() {
+        m_forceQuit = true;
+        qApp->quit();
+    });
+
+    connect(m_trayMenu, &QMenu::aboutToShow, this, [this]() {
+        if (isVisible() && !isMinimized()) {
+            m_trayActionToggleWindow->setText("Hide Control Panel");
+        } else {
+            m_trayActionToggleWindow->setText("Open Control Panel");
+        }
+    });
+
+    m_trayIcon = new QSystemTrayIcon(this);
+    m_trayIcon->setContextMenu(m_trayMenu);
+
+    connect(m_trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
+            if (isVisible() && !isMinimized()) {
+                hide();
+            } else {
+                showNormal();
+                raise();
+                activateWindow();
+            }
+        }
+    });
+
+    updateTrayIcon(m_lastAudioMode, m_lastConnected, m_lastAncActive, m_lastModel, m_lastCodec, m_lastHeadsetName);
+    m_trayIcon->show();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    if (m_trayIcon && m_trayIcon->isVisible() && !m_forceQuit) {
+        hide();
+        event->ignore();
+    } else {
+        event->accept();
+    }
+}
+
+QPixmap MainWindow::renderModePixmap(int size, const QString &mode, bool connected, bool ancActive) {
+    QPixmap pix(size, size);
+    pix.fill(Qt::transparent);
+
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setRenderHint(QPainter::TextAntialiasing, true);
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    double s = size / 64.0;
+    p.scale(s, s);
+
+    // Color definitions
+    QColor bodyColor = connected ? QColor(241, 245, 249) : QColor(100, 116, 139);
+    QColor shadowColor = QColor(15, 23, 42, 180);
+    QColor accentColor;
+    QString badgeText;
+    QColor badgeBg;
+    QColor badgeBorder = QColor(255, 255, 255, 220);
+
+    QString m = mode.toLower();
+    if (!connected) {
+        accentColor = QColor(100, 116, 139);
+        badgeText = "✕";
+        badgeBg = QColor(239, 68, 68);
+    } else if (m.contains("gaming")) {
+        accentColor = QColor(34, 197, 94); // Vibrant Green
+        badgeText = "GAME";
+        badgeBg = QColor(22, 163, 74);
+    } else if (m.contains("broadcast") || m.contains("auracast")) {
+        accentColor = QColor(168, 85, 247); // Vibrant Purple
+        badgeText = "CAST";
+        badgeBg = QColor(147, 51, 234);
+    } else {
+        // High Quality / One-to-One
+        accentColor = QColor(14, 165, 233); // Sky Blue
+        badgeText = "HQ";
+        badgeBg = QColor(2, 132, 199);
+    }
+
+    // 1. Draw Headphone Band
+    QPainterPath band;
+    band.moveTo(14, 32);
+    band.cubicTo(14, 15, 50, 15, 50, 32);
+
+    // Subtle dark outer stroke for high contrast on light backgrounds
+    p.setPen(QPen(shadowColor, 5.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(band);
+
+    // Main band stroke
+    p.setPen(QPen(bodyColor, 3.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawPath(band);
+
+    // If Auracast broadcast is active, draw radiating radio wave arcs from the top
+    if (connected && (m.contains("broadcast") || m.contains("auracast"))) {
+        p.setPen(QPen(accentColor, 2.5, Qt::SolidLine, Qt::RoundCap));
+        // Inner arc
+        p.drawArc(QRectF(22, 6, 20, 14), 45 * 16, 90 * 16);
+        // Outer arc
+        p.drawArc(QRectF(16, 1, 32, 20), 45 * 16, 90 * 16);
+    }
+
+    // 2. Draw Earcups
+    auto drawEarcup = [&](double x, double y, double w, double h) {
+        // Shadow/outline
+        p.setPen(Qt::NoPen);
+        p.setBrush(shadowColor);
+        p.drawRoundedRect(QRectF(x - 0.75, y - 0.75, w + 1.5, h + 1.5), 4, 4);
+
+        // Cup body
+        p.setBrush(bodyColor);
+        p.drawRoundedRect(QRectF(x, y, w, h), 3.5, 3.5);
+
+        // Accent indicator bar/pill on cup
+        p.setBrush(accentColor);
+        p.drawRoundedRect(QRectF(x + 2, y + 4, w - 4, h - 8), 1.5, 1.5);
+    };
+
+    drawEarcup(7, 26, 11, 20);   // Left cup
+    drawEarcup(46, 26, 11, 20);  // Right cup
+
+    // 3. Draw Mode Badge in bottom-right corner
+    if (!connected) {
+        QRectF badgeRect(34, 34, 26, 26);
+        p.setPen(QPen(badgeBorder, 2.0));
+        p.setBrush(badgeBg);
+        p.drawEllipse(badgeRect);
+
+        // Draw 'X'
+        p.setPen(QPen(Qt::white, 2.5, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(41, 41, 53, 53);
+        p.drawLine(53, 41, 41, 53);
+    } else {
+        bool wideBadge = (badgeText.length() > 2);
+        double bw = wideBadge ? 38.0 : 30.0;
+        double bh = 22.0;
+        double bx = 64.0 - bw - 2.0;
+        double by = 64.0 - bh - 2.0;
+        QRectF badgeRect(bx, by, bw, bh);
+
+        // Outer dark drop-shadow for badge
+        p.setPen(Qt::NoPen);
+        p.setBrush(shadowColor);
+        p.drawRoundedRect(QRectF(bx - 0.5, by + 0.5, bw + 1.0, bh + 1.0), 6, 6);
+
+        // Badge background
+        p.setPen(QPen(badgeBorder, 1.5));
+        p.setBrush(badgeBg);
+        p.drawRoundedRect(badgeRect, 6, 6);
+
+        // Badge Text
+        p.setPen(Qt::white);
+        QFont f = p.font();
+        f.setFamily("sans-serif");
+        f.setPixelSize(wideBadge ? 10 : 12);
+        f.setBold(true);
+        f.setWeight(QFont::Black);
+        p.setFont(f);
+        p.drawText(badgeRect, Qt::AlignCenter, badgeText);
+    }
+
+    // 4. If ANC is active, draw a small glowing cyan dot at top-left
+    if (connected && ancActive) {
+        QRectF ancDot(4, 14, 8, 8);
+        p.setPen(QPen(Qt::white, 1.0));
+        p.setBrush(QColor(56, 189, 248)); // Glowing cyan dot
+        p.drawEllipse(ancDot);
+    }
+
+    p.end();
+    return pix;
+}
+
+QIcon MainWindow::generateTrayIcon(const QString &mode, bool connected, bool ancActive) {
+    QIcon icon;
+    const int sizes[] = {16, 22, 24, 32, 48, 64, 128};
+    for (int s : sizes) {
+        icon.addPixmap(renderModePixmap(s, mode, connected, ancActive));
+    }
+    return icon;
+}
+
+void MainWindow::updateTrayIcon(const QString &mode, bool connected, bool ancActive,
+                                const QString &model, const QString &codec, const QString &headsetName) {
+    m_lastAudioMode = mode;
+    m_lastConnected = connected;
+    m_lastAncActive = ancActive;
+    m_lastModel = model;
+    m_lastCodec = codec;
+    m_lastHeadsetName = headsetName;
+
+    QIcon icon = generateTrayIcon(mode, connected, ancActive);
+    setWindowIcon(icon);
+
+    if (!m_trayIcon) return;
+    m_trayIcon->setIcon(icon);
+
+    // Update tooltip
+    QString tip = "Sennheiser BTD Control\n";
+    if (connected) {
+        tip += QString("Model: %1\n").arg(model.isEmpty() ? "BTD 700" : model);
+        QString displayMode = "High Quality (One-to-One)";
+        QString m = mode.toLower();
+        if (m.contains("gaming")) displayMode = "Gaming Mode";
+        else if (m.contains("broadcast") || m.contains("auracast")) displayMode = "Auracast Broadcast";
+        tip += QString("Mode: %1\n").arg(displayMode);
+
+        if (!codec.isEmpty() && codec != "-") {
+            tip += QString("Codec: %1\n").arg(codec);
+        }
+        if (!headsetName.isEmpty()) {
+            tip += QString("Headset: %1 (%2)").arg(headsetName).arg(ancActive ? "ANC ON" : "ANC OFF");
+        }
+    } else {
+        tip += "No Sennheiser BTD dongle connected";
+    }
+    m_trayIcon->setToolTip(tip.trimmed());
+
+    // Update menu actions
+    if (m_trayStatusAction) {
+        if (connected) {
+            m_trayStatusAction->setText(model.isEmpty() ? "Sennheiser BTD 700 (Connected)" : QString("%1 (Connected)").arg(model));
+        } else {
+            m_trayStatusAction->setText("Dongle Disconnected");
+        }
+    }
+
+    if (m_trayActionHQ && m_trayActionGaming && m_trayActionBroadcast) {
+        m_trayActionHQ->setEnabled(connected);
+        m_trayActionGaming->setEnabled(connected);
+        m_trayActionBroadcast->setEnabled(connected);
+
+        QString m = mode.toLower();
+        if (m.contains("gaming")) {
+            m_trayActionGaming->setChecked(true);
+        } else if (m.contains("broadcast") || m.contains("auracast")) {
+            m_trayActionBroadcast->setChecked(true);
+        } else {
+            m_trayActionHQ->setChecked(true);
+        }
+    }
+
+    if (m_trayActionAnc) {
+        m_trayActionAnc->setEnabled(!headsetName.isEmpty());
+        m_trayActionAnc->setChecked(ancActive);
+        if (!headsetName.isEmpty()) {
+            m_trayActionAnc->setText(QString("Active Noise Cancellation (%1)").arg(ancActive ? "ON" : "OFF"));
+        } else {
+            m_trayActionAnc->setText("Active Noise Cancellation (No Headset)");
+        }
+    }
+}
+

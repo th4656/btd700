@@ -89,3 +89,19 @@ fn test_cli_parse_broadcast() {
         other => panic!("Expected Broadcast command, got {:?}", other),
     }
 }
+
+#[test]
+fn test_cli_parse_gui() {
+    let cli = Cli::try_parse_from(["btd700", "gui"]).unwrap();
+    match cli.command {
+        Some(Commands::Gui { tray }) => assert!(!tray),
+        other => panic!("Expected Gui command, got {:?}", other),
+    }
+
+    let cli_tray = Cli::try_parse_from(["btd700", "gui", "--tray"]).unwrap();
+    match cli_tray.command {
+        Some(Commands::Gui { tray }) => assert!(tray),
+        other => panic!("Expected Gui command with tray, got {:?}", other),
+    }
+}
+

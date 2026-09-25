@@ -143,7 +143,11 @@ pub enum Commands {
 
     /// Launch the native Qt6 GUI Control Panel
     #[command(name = "gui")]
-    Gui,
+    Gui {
+        /// Start minimized to system tray
+        #[arg(long, short = 't')]
+        tray: bool,
+    },
 }
 
 pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -151,7 +155,7 @@ pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Some(c) => c,
         None => {
             // Default to running GUI if no arguments passed
-            return run_gui();
+            return run_gui(false);
         }
     };
 
@@ -516,23 +520,30 @@ pub fn run_cli(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Commands::Gui => {
-            return run_gui();
+        Commands::Gui { tray } => {
+            return run_gui(tray);
         }
     }
 
     Ok(())
 }
 
-pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_gui(start_in_tray: bool) -> Result<(), Box<dyn std::error::Error>> {
     unsafe extern "C" {
         fn run_qt_gui_app(argc: libc::c_int, argv: *const *const libc::c_char) -> libc::c_int;
     }
 
     let arg0 = std::ffi::CString::new("btd700").unwrap();
-    let argv = [arg0.as_ptr(), std::ptr::null()];
+    let arg1 = std::ffi::CString::new("--tray").unwrap();
+    let mut argv: Vec<*const libc::c_char> = vec![arg0.as_ptr()];
+    if start_in_tray {
+        argv.push(arg1.as_ptr());
+    }
+    argv.push(std::ptr::null());
+
+    let argc = (argv.len() - 1) as libc::c_int;
     unsafe {
-        run_qt_gui_app(1, argv.as_ptr());
+        run_qt_gui_app(argc, argv.as_ptr());
     }
     Ok(())
 }
